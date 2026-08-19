@@ -12,5 +12,5 @@ wheels/
 # Runtime files (contain secrets / local state, not for version control)
 config.json
 *.log
-/journeycapture.spec
+*.spec
 

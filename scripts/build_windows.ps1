@@ -59,7 +59,7 @@ $ExeName = "journeycapture-$Version"
 Step "Building dist\${ExeName}.exe (PyInstaller)"
 # Remove stale spec so PyInstaller always uses our explicit flags
 Remove-Item -Path "$Root\${ExeName}.spec" -ErrorAction SilentlyContinue
-uv run pyinstaller --onefile --console --name $ExeName --distpath "$Root\dist" --workpath "$Root\build" --specpath "$Root" packaging/run.py
+uv run pyinstaller --onefile --console --name $ExeName --distpath "$Root\dist" --workpath "$Root\build" --specpath "$Root\build" packaging/run.py
 if ($LASTEXITCODE -ne 0) { Fail "PyInstaller build failed." }
 Ok "Build complete: $Root\dist\${ExeName}.exe"
 
