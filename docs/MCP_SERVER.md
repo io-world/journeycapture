@@ -20,7 +20,22 @@ the MCP SDK isn't a dependency of `journeycapture.exe` or its Windows build.
 
 ## Configuration
 
-Set via environment variables, read once at startup (`journeycapture_mcp/config.py`):
+Two ways to configure it — a JSON file or environment variables. `journeycapture_mcp/config.py`
+uses the file when `--config` is given, otherwise falls back to the environment variables.
+
+**File** (`--config PATH`): the same shape as `scripts/config.json`, so you can point
+straight at the one you already have:
+
+```
+uv run journeycapture-mcp --config scripts/config.json
+```
+
+Recognized keys: `host`, `api_key` (both required), `port` (default `8443`), `scheme`
+(default `"http"`), `timeout`, `mcp_host` (default `"127.0.0.1"`), `mcp_port` (default
+`8000`). Extra keys `scripts/config.json` has for the other scripts (`monitor`,
+`format`, `quality`, `out`) are simply ignored.
+
+**Environment variables** (used only when `--config` isn't given):
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
@@ -31,15 +46,15 @@ Set via environment variables, read once at startup (`journeycapture_mcp/config.
 | `JOURNEYCAPTURE_MCP_HOST` | no | `127.0.0.1` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_PORT` | no | `8000` | where **this** server itself listens |
 
-Missing `JOURNEYCAPTURE_HOST`/`JOURNEYCAPTURE_API_KEY` fails fast with a clear message
-on stderr rather than starting half-configured.
+Either way, a missing host/api_key fails fast with a clear message on stderr rather
+than starting half-configured.
 
 There's no built-in way to talk to more than one `journeycapture.exe` instance from a
 single server process — each running `journeycapture-mcp` points at exactly one host.
 
-Don't confuse the two host/port pairs: `JOURNEYCAPTURE_HOST`/`_PORT` is where the
-Windows box is; `JOURNEYCAPTURE_MCP_HOST`/`_PORT` is where this server binds for its
-own MCP clients to connect to.
+Don't confuse the two host/port pairs: `host`/`port` (or `JOURNEYCAPTURE_HOST`/`_PORT`)
+is where the Windows box is; `mcp_host`/`mcp_port` (or `JOURNEYCAPTURE_MCP_HOST`/`_PORT`)
+is where this server binds for its own MCP clients to connect to.
 
 ## Running it
 
@@ -47,9 +62,7 @@ This server speaks MCP over **streamable HTTP**, not stdio — you start it your
 separately from your MCP client, and it keeps running until you stop it:
 
 ```
-export JOURNEYCAPTURE_HOST=192.168.1.50
-export JOURNEYCAPTURE_API_KEY=your-real-api-key
-uv run journeycapture-mcp
+uv run journeycapture-mcp --config scripts/config.json
 ```
 
 By default it binds `127.0.0.1:8000` — loopback only, so nothing off this machine can

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 class ConfigError(Exception):
@@ -21,7 +23,43 @@ class Settings:
     mcp_port: int = 8000
 
 
-def load_settings() -> Settings:
+def load_settings(config_path: str | Path | None = None) -> Settings:
+    if config_path is not None:
+        return _load_settings_from_file(Path(config_path))
+    return _load_settings_from_env()
+
+
+def _load_settings_from_file(path: Path) -> Settings:
+    if not path.is_file():
+        raise ConfigError(f"Config file not found: {path}")
+    try:
+        data = json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"Config file at {path} is not valid JSON: {e}") from e
+
+    host = data.get("host")
+    if not host:
+        raise ConfigError(f"{path}: 'host' is required (the Windows box's IP or hostname)")
+
+    api_key = data.get("api_key")
+    if not api_key:
+        raise ConfigError(f"{path}: 'api_key' is required (must match journeycapture.exe's config.json)")
+
+    try:
+        return Settings(
+            host=host,
+            api_key=api_key,
+            port=int(data.get("port", 8443)),
+            scheme=data.get("scheme", "http"),
+            timeout=float(data.get("timeout", 10.0)),
+            mcp_host=data.get("mcp_host", "127.0.0.1"),
+            mcp_port=int(data.get("mcp_port", 8000)),
+        )
+    except (TypeError, ValueError) as e:
+        raise ConfigError(f"{path}: invalid value: {e}") from e
+
+
+def _load_settings_from_env() -> Settings:
     host = os.environ.get("JOURNEYCAPTURE_HOST")
     if not host:
         raise ConfigError(

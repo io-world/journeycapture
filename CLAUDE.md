@@ -23,7 +23,7 @@ Two components in one repo, meant to run on two different machines:
 uv sync                    # install deps for the thin client (creates .venv)
 uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
 uv run journeycapture      # run the thin client from source (needs config.json - see below)
-uv run journeycapture-mcp  # run the MCP server (needs JOURNEYCAPTURE_HOST/_API_KEY env vars)
+uv run journeycapture-mcp --config scripts/config.json  # run the MCP server
 uv run pytest -q           # run the full test suite
 uv run pytest tests/test_security.py::test_wrong_key_raises_401  # run a single test
 ```
@@ -136,12 +136,15 @@ dependencies (`mcp`, `httpx`) sit under the `mcp` optional-dependency group, not
 base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
 `uv sync` on the Windows box never needs to know the MCP SDK exists.
 
-- **`config.py`** — reads `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY` (the
-  Windows box's address) plus `JOURNEYCAPTURE_MCP_HOST`/`_MCP_PORT` (where this server
-  itself listens, default `127.0.0.1:8000` — deliberately separate names from the
-  first pair to avoid confusing "the Windows box" with "this server") from the
-  environment at startup, fails fast with a clear stderr message if host/api_key are
-  missing (mirrors `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
+- **`config.py`** — `load_settings(config_path=None)`: with a path (the `--config`
+  CLI flag), reads a JSON file shaped like `scripts/config.json`; without one, falls
+  back to `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY`/`_MCP_HOST`/`_MCP_PORT`
+  env vars. Either way it's the Windows box's address (`host`/`port`/`scheme`/
+  `api_key`) plus where this server itself listens (`mcp_host`/`mcp_port`, default
+  `127.0.0.1:8000` — deliberately separate names from the first pair to avoid
+  confusing "the Windows box" with "this server"). Fails fast with a clear stderr
+  message if host/api_key are missing either way (mirrors
+  `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
   REST API, one method per endpoint. Raises `JourneyCaptureError` on non-2xx
   responses, with the response body included (that's where FastAPI's 422 validation

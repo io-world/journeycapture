@@ -2,6 +2,18 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — MCP server: --config file, no more required env vars
+
+`journeycapture_mcp/config.py`'s `load_settings()` now accepts an optional
+`config_path`; `journeycapture-mcp --config scripts/config.json` reads host/api_key
+straight from the same file the live-testing scripts already use, so there's nothing
+to export by hand. Recognizes the same key names (`host`, `api_key`, `port`,
+`scheme`, `timeout`) plus two new optional ones (`mcp_host`, `mcp_port`) for
+overriding this server's own bind address from the file too. The
+`JOURNEYCAPTURE_*` environment variables still work exactly as before — they're the
+fallback when `--config` isn't given, not replaced by it. Added `tests/test_mcp_config.py`
+(8 tests, previously untested) covering both paths — 53 tests total, up from 45.
+
 ## 2026-08-19 — Rename thin client package; switch MCP server to HTTP transport
 
 Two changes:
