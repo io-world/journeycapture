@@ -2,6 +2,25 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Fix the actual root cause: coordinates computed against the wrong resolution
+
+Follow-up to the double-click investigation above: a double-click on Chrome's desktop
+icon "still didn't work." The actual cause wasn't the click path at all (already
+verified working) — it was coordinates computed assuming a 1366×768 screen against a
+machine that's really 1920×1080. `351×(1920/1366)≈493`, `104×(1080/768)≈146` — the
+failed coordinates were a wrong-resolution-scaled version of Chrome's real icon
+position, so every click landed on empty desktop.
+
+- Re-opened Chrome live using the already-verified-correct coordinates from
+  `click_test.py`'s earlier run.
+- Added an explicit warning to the docstrings most likely to be read right before
+  computing coordinates — `journeycapture_mcp/server.py`'s `list_monitors`/
+  `take_screenshot` tools and `journeycapture_thinclient/routes/screenshot.py`'s
+  `screenshot_monitors` route — to always read the real width/height from the
+  response rather than assuming a resolution.
+- New `CLAUDE.md` section ("Never assume the screen resolution") documenting this
+  failure mode directly, with the exact math that confirmed it.
+
 ## 2026-08-19 — MCP server: log every tool call; add click/double-click test script
 
 Prompted by a suspected double-click issue: live-tested it directly against the real

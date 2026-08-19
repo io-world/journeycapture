@@ -78,6 +78,21 @@ without re-verifying against a live instance. `\n` in typed text is translated t
 `Key.enter` by `pynput` automatically (see `pynput`'s `_CONTROL_CODES`), so no special
 handling is needed to end typed text with a return.
 
+### Never assume the screen resolution
+
+`/mouse/move` and `/mouse/click`'s `x`/`y` are real pixel coordinates on the actual
+Windows box — there's no scaling or normalization. A caller (human or LLM) that
+estimates an icon's position from a screenshot without confirming the image's real
+pixel dimensions first will silently compute coordinates for the wrong resolution and
+click empty desktop instead. This actually happened: something assumed 1366×768 on a
+machine that's really 1920×1080, and every click landed about 29% short of the real
+target (`351×(1920/1366)≈493`, the real x for what should have been Chrome's icon).
+`GET /screenshot/monitors` and `take_screenshot`'s own response both carry the real
+`width`/`height` — always read coordinates from one of those, never assume a
+standard resolution. `journeycapture_mcp`'s `list_monitors`/`take_screenshot` tool
+docstrings and `screenshot_monitors`'s OpenAPI description both say this explicitly
+for the same reason. See `docs/CHANGELOG.md`'s "Fix the actual root cause" entry.
+
 ### Every command is logged; held input auto-releases
 
 Every mouse/keyboard/screenshot route logs one line (endpoint, source IP, and the

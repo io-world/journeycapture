@@ -24,7 +24,7 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
 
     @server.tool()
     async def list_monitors() -> list[dict]:
-        """List monitors with pixel bounds in the same coordinate space move_mouse uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1."""
+        """List monitors with pixel bounds in the same coordinate space move_mouse uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1. Always read the actual width/height from here (or from a screenshot's real pixel dimensions) before computing click/move coordinates — never assume a resolution like 1366x768. Guessing wrong is why a click can silently land on empty desktop instead of the intended icon."""
         logger.info("list_monitors")
         return await client.list_monitors()
 
@@ -34,7 +34,7 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
         quality: int | None = None,
         monitor: int | None = None,
     ) -> Image:
-        """Capture a screenshot of one monitor. format/quality default to the server's own config when omitted; monitor index comes from list_monitors."""
+        """Capture a screenshot of one monitor. format/quality default to the server's own config when omitted; monitor index comes from list_monitors. Measure coordinates against this image's actual pixel dimensions (or list_monitors) — don't assume a resolution."""
         logger.info("take_screenshot format=%s quality=%s monitor=%s", format, quality, monitor)
         data, content_type = await client.screenshot(format=format, quality=quality, monitor=monitor)
         image_format = "png" if "png" in content_type else "jpeg"

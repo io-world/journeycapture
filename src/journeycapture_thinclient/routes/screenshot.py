@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.get("/screenshot/monitors", response_model=list[MonitorInfo])
 def screenshot_monitors() -> list[MonitorInfo]:
-    """List monitors with pixel bounds in the same coordinate space /mouse/move uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1."""
+    """List monitors with pixel bounds in the same coordinate space /mouse/move uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1. Always read the actual width/height from here (or a screenshot's real pixel dimensions) before computing click/move coordinates — never assume a resolution."""
     return capture.list_monitors()
 
 
