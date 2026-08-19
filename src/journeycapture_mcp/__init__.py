@@ -18,4 +18,4 @@ def main() -> None:
 
     client = JourneyCaptureClient(settings)
     server = build_server(client)
-    server.run(transport="stdio")
+    server.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)

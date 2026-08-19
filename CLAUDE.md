@@ -136,7 +136,10 @@ dependencies (`mcp`, `httpx`) sit under the `mcp` optional-dependency group, not
 base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
 `uv sync` on the Windows box never needs to know the MCP SDK exists.
 
-- **`config.py`** — reads `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY` from the
+- **`config.py`** — reads `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY` (the
+  Windows box's address) plus `JOURNEYCAPTURE_MCP_HOST`/`_MCP_PORT` (where this server
+  itself listens, default `127.0.0.1:8000` — deliberately separate names from the
+  first pair to avoid confusing "the Windows box" with "this server") from the
   environment at startup, fails fast with a clear stderr message if host/api_key are
   missing (mirrors `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
@@ -151,8 +154,15 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
   or a file path — the one endpoint needing translation rather than a passthrough.
   Parameterized by `client` (rather than importing a module-level singleton) so tests
   can pass an `AsyncMock` and call `server.call_tool(name, args)` directly, in-process,
-  with no real network or stdio transport involved.
+  with no real network or HTTP transport involved.
 - **`__init__.main()`** — the `journeycapture-mcp` console-script entry point: loads
-  config, builds the client and server, calls `server.run(transport="stdio")`.
+  config, builds the client and server, calls
+  `server.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)`.
+  Streamable HTTP, not stdio — the user runs this themselves in a terminal and it
+  keeps listening (loopback-only by default) rather than being spawned/owned by the
+  MCP client's own lifecycle. This server has no auth of its own at the MCP/HTTP
+  layer, so the loopback default is the only thing standing between "just this
+  machine" and "unauthenticated remote control of the Windows box" if
+  `JOURNEYCAPTURE_MCP_HOST` were ever pointed at a non-loopback address.
 
 Full setup/config/testing details: `docs/MCP_SERVER.md`.

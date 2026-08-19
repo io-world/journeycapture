@@ -2,6 +2,29 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Rename thin client package; switch MCP server to HTTP transport
+
+Two changes:
+
+- Renamed `src/journeycapture/` to `src/journeycapture_thinclient/` (all internal
+  imports, test mock-patch targets, and `CLAUDE.md` updated to match), to disambiguate
+  it from `journeycapture_mcp` now that both packages live in this repo. Scoped to the
+  importable package only — the distribution name, the `journeycapture` CLI command,
+  the built exe name, and the log filename default are all unchanged.
+- `journeycapture_mcp` now speaks **streamable HTTP** instead of stdio. Previously the
+  MCP client (VS Code) launched and owned the process automatically; the desired
+  workflow instead was starting `journeycapture-mcp` by hand and pointing `.mcp.json`
+  at it, which stdio can't do — there's no "already running" state to point at with
+  stdio. Binds `127.0.0.1:8000` by default (new `JOURNEYCAPTURE_MCP_HOST`/
+  `_MCP_PORT` env vars, deliberately separate from `JOURNEYCAPTURE_HOST`/`_PORT`,
+  which mean the Windows box's address, not this server's own). Loopback-only by
+  default is a deliberate mitigation, not an accident: this server holds the real
+  thin-client API key internally and has no auth of its own at the MCP/HTTP layer, so
+  whatever can reach its bound address can drive the Windows box through it — verified
+  the SDK (`mcp==2.0.0`) already defaults `run_streamable_http_async` to
+  `127.0.0.1` before relying on it. `.mcp.json` updated from a `command`/`env` stdio
+  entry to a `type: "http"` / `url` entry.
+
 ## 2026-08-19 — Add the MCP server
 
 New package `src/journeycapture_mcp/`, exposing the REST API as MCP tools. Runs on
