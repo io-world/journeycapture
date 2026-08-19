@@ -4,19 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Windows thin client (`journeycapture`) exposing a local REST API (FastAPI/uvicorn) for
-remote mouse/keyboard control and desktop screenshot capture. The server code is
-cross-platform Python, but it's only ever *run* as a packaged `.exe` on a real Windows
-desktop — mouse/keyboard injection (`pynput`) and screenshot capture (`mss`) are
-Windows-only in practice, and the whole point of the tool is remote-controlling a
-Windows machine. Protected by an API-key header and a source-IP allowlist, both
-required in `config.json`.
+Two components in one repo, meant to run on two different machines:
+
+- **`journeycapture`** — a Windows thin client exposing a local REST API
+  (FastAPI/uvicorn) for remote mouse/keyboard control and desktop screenshot capture.
+  The server code is cross-platform Python, but it's only ever *run* as a packaged
+  `.exe` on a real Windows desktop — mouse/keyboard injection (`pynput`) and
+  screenshot capture (`mss`) are Windows-only in practice, and the whole point of the
+  tool is remote-controlling a Windows machine. Protected by an API-key header and a
+  source-IP allowlist, both required in `config.json`.
+- **`journeycapture_mcp`** — an MCP server exposing that REST API as MCP tools. Runs
+  on the *controller* machine (wherever your MCP client is), not on the Windows box.
+  See `docs/MCP_SERVER.md`.
 
 ## Commands
 
 ```
-uv sync                    # install deps (creates .venv)
-uv run journeycapture      # run the server from source (needs config.json - see below)
+uv sync                    # install deps for the thin client (creates .venv)
+uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
+uv run journeycapture      # run the thin client from source (needs config.json - see below)
+uv run journeycapture-mcp  # run the MCP server (needs JOURNEYCAPTURE_HOST/_API_KEY env vars)
 uv run pytest -q           # run the full test suite
 uv run pytest tests/test_security.py::test_wrong_key_raises_401  # run a single test
 ```
@@ -120,3 +127,32 @@ Must run on real Windows (PyInstaller doesn't cross-compile) — see
 `scripts/build_windows.ps1` for the one-shot version (installs `uv` if missing, syncs
 deps, runs the test suite, builds a version-named `dist/journeycapture-<version>.exe`
 via PyInstaller, copies `config.example.json` → `dist/config.json` if missing).
+
+### `journeycapture_mcp` — the MCP server
+
+Lives in `src/journeycapture_mcp/`, a separate top-level package from `journeycapture`
+in the same repo/pyproject (`[tool.uv.build-backend] module-name` lists both). Its
+dependencies (`mcp`, `httpx`) sit under the `mcp` optional-dependency group, not the
+base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
+`uv sync` on the Windows box never needs to know the MCP SDK exists.
+
+- **`config.py`** — reads `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY` from the
+  environment at startup, fails fast with a clear stderr message if host/api_key are
+  missing (mirrors `journeycapture.config.load_config`'s fail-fast philosophy).
+- **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
+  REST API, one method per endpoint. Raises `JourneyCaptureError` on non-2xx
+  responses, with the response body included (that's where FastAPI's 422 validation
+  details live).
+- **`server.py`** — `build_server(client)` builds an `MCPServer`
+  (`mcp.server.mcpserver.MCPServer` — this SDK's current name for what used to be
+  called `FastMCP`) and registers one `@server.tool()` per REST endpoint, with
+  docstrings mirroring the REST API's own OpenAPI descriptions. `take_screenshot`
+  returns `mcp.server.mcpserver.Image` (base64-encoded image content), not raw bytes
+  or a file path — the one endpoint needing translation rather than a passthrough.
+  Parameterized by `client` (rather than importing a module-level singleton) so tests
+  can pass an `AsyncMock` and call `server.call_tool(name, args)` directly, in-process,
+  with no real network or stdio transport involved.
+- **`__init__.main()`** — the `journeycapture-mcp` console-script entry point: loads
+  config, builds the client and server, calls `server.run(transport="stdio")`.
+
+Full setup/config/testing details: `docs/MCP_SERVER.md`.

@@ -2,6 +2,36 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Add the MCP server
+
+New package `src/journeycapture_mcp/`, exposing the REST API as MCP tools. Runs on
+the controller machine (wherever the MCP client is), separately from
+`journeycapture.exe` on the Windows box — the two now genuinely run on different
+computers, talking over the same HTTP API `scripts/*.py` already exercised.
+
+- One MCP tool per REST endpoint (`health_check`, `list_monitors`, `take_screenshot`,
+  `move_mouse`, `click_mouse`, `scroll_mouse`, `type_text`, `send_keys`), with
+  docstrings mirroring the REST API's own OpenAPI descriptions written in the
+  pre-MCP-readiness pass below — same reference info, one layer removed.
+  `take_screenshot` returns MCP image content (base64-encoded), the one endpoint
+  needing real translation rather than a passthrough.
+- Config via environment variables (`JOURNEYCAPTURE_HOST`, `_PORT`, `_SCHEME`,
+  `_API_KEY`), read once at startup with a fail-fast error message if host/api_key
+  are missing — verified: `journeycapture-mcp` with them unset exits 1 with a clear
+  message, not a stack trace.
+- New `journeycapture-mcp` terminal command (`[project.scripts]`), speaking MCP over
+  stdio — meant to be spawned by an MCP client (Claude Code, Claude Desktop), not run
+  interactively.
+- The MCP SDK lives behind a new `mcp` optional-dependency group
+  (`uv sync --extra mcp`), kept separate from the thin client's own dependencies so
+  `scripts/build_windows.ps1`'s plain `uv sync` on the Windows box never needs it.
+  The two new test files (`tests/test_mcp_client.py`, `tests/test_mcp_server.py`)
+  call `pytest.importorskip("mcp")` so they skip cleanly rather than fail when that
+  extra isn't installed — verified by running the full suite both with and without
+  `--extra mcp` synced (45 passed vs. 33 passed + 2 skipped).
+- New `docs/MCP_SERVER.md` covering setup, configuration, an example `.mcp.json`
+  entry, and testing.
+
 ## 2026-08-19 — Audit logging + stuck-key safety net
 
 A broader "what concerns you about this build" review turned up two gaps beyond the

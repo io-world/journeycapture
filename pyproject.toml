@@ -12,16 +12,30 @@ dependencies = [
     "uvicorn[standard]>=0.52.4",
 ]
 
+[project.optional-dependencies]
+# Controller-side only (runs the MCP server, not the Windows thin client itself) —
+# kept out of the base dependencies so scripts/build_windows.ps1's plain `uv sync`
+# doesn't need to know the MCP SDK exists.
+mcp = [
+    "mcp>=2.0.0",
+    "httpx>=0.28.1",
+]
+
 [project.scripts]
 journeycapture = "journeycapture:main"
+journeycapture-mcp = "journeycapture_mcp:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["journeycapture", "journeycapture_mcp"]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
     "pyinstaller>=6.22.2",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.0.0",
 ]
