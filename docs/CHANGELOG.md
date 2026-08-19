@@ -2,6 +2,24 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Design decision: no UIA, screenshots stay primary
+
+Follow-up discussion after the coordinate/resolution bug: considered adding Windows
+UI Automation (UIA)-based element targeting — finding a button/icon by name via the
+accessibility tree instead of guessing pixel coordinates from a screenshot. Decided
+against it. Documented in `CLAUDE.md` ("Screenshot/pixel control is deliberate, not a
+limitation to patch") so it isn't proposed again as an oversight:
+
+- The product goal is mimicking how an actual human uses the computer — look at the
+  screen, click what's visible — which screenshots already do. UIA queries a
+  structured tree a user never sees; it's a different paradigm, not a refinement.
+- Real costs were weighed too, not just philosophy: UIA's `Value` pattern would leak
+  live text field contents (undoing the privacy carve-out `/keyboard/type` already
+  has), UIA calls can hang, a second coordinate system needs its own correctness
+  verification, and splitting "find" from "click" into two calls reopens a staleness
+  window — none of which the actual bug (an assumed resolution) required solving.
+- No code changes — this is a documented decision, not a build.
+
 ## 2026-08-19 — Fix the actual root cause: coordinates computed against the wrong resolution
 
 Follow-up to the double-click investigation above: a double-click on Chrome's desktop

@@ -93,6 +93,26 @@ standard resolution. `journeycapture_mcp`'s `list_monitors`/`take_screenshot` to
 docstrings and `screenshot_monitors`'s OpenAPI description both say this explicitly
 for the same reason. See `docs/CHANGELOG.md`'s "Fix the actual root cause" entry.
 
+### Screenshot/pixel control is deliberate, not a limitation to patch
+
+UI Automation (UIA)-based element targeting — asking Windows directly "where is the
+button named X" instead of guessing a pixel coordinate from a screenshot — was
+considered and explicitly rejected, not overlooked. The design goal is to mimic how
+an actual human uses the computer: look at the screen, decide where to click based on
+what's visible, act — the same thing a screenshot + pixel coordinates already does.
+UIA would be a fundamentally different paradigm (querying a structured accessibility
+tree a user never sees), not a refinement of this one.
+
+It was also weighed against real costs, not just philosophy: UIA's `Value` pattern
+exposes live text field contents (a privacy leak the `/keyboard/type` audit-logging
+carve-out specifically avoids elsewhere), UIA calls can hang against unresponsive
+apps, coordinates from a second system would need their own DPI/multi-monitor
+correctness verification, and splitting "find" and "click" into two calls reopens a
+staleness/TOCTOU window. None of that changes the resolution-assumption bug this
+session actually hit — the fix for that is `list_monitors`/reading the screenshot's
+real dimensions (see below), which is already in place and doesn't require any of
+this. Don't propose UIA-based targeting again without this context.
+
 ### Every command is logged; held input auto-releases
 
 Every mouse/keyboard/screenshot route logs one line (endpoint, source IP, and the
