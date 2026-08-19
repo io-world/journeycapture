@@ -91,6 +91,21 @@ can reach that address.
 Since VS Code no longer manages this process's lifecycle, restarting it (e.g. after
 pulling code changes) is on you — stop it (`Ctrl-C` or `kill`) and run it again.
 
+## Logging
+
+Every tool call is logged (`journeycapture_mcp/server.py`) — tool name and arguments —
+to both the console and a rotating `journeycapture-mcp.log` file next to wherever you
+ran the command (`journeycapture_mcp/logging_setup.py`, same console+file pattern as
+the thin client's own logging). `type_text` logs the character count only, never the
+typed text itself, for the same reason the thin client's own `/keyboard/type` route
+does — it could be a password or other sensitive content.
+
+This is the log to check if something looks wrong — e.g. to tell whether a
+double-click actually arrived as one `click_mouse(clicks=2)` call or as two separate
+single clicks close together (which won't register as a real double-click on the
+Windows side no matter how close together they are, since each is a fully separate
+HTTP round trip).
+
 ## Tools
 
 One tool per REST endpoint (`journeycapture_mcp/server.py`) — `health_check`,

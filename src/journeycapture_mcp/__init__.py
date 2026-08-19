@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 from journeycapture_mcp.client import JourneyCaptureClient
 from journeycapture_mcp.config import ConfigError, load_settings
+from journeycapture_mcp.logging_setup import configure_logging
 from journeycapture_mcp.server import build_server
 
 __all__ = ["main"]
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -22,12 +26,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main() -> None:
+    configure_logging()
+
     args = parse_args()
     try:
         settings = load_settings(args.config)
     except ConfigError as e:
         print(f"journeycapture-mcp: {e}", file=sys.stderr)
         sys.exit(1)
+
+    logger.info("Configured for %s:%s (Windows box), listening on %s:%s", settings.host, settings.port, settings.mcp_host, settings.mcp_port)
 
     client = JourneyCaptureClient(settings)
     server = build_server(client)

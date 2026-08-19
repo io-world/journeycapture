@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock
 
 import pytest
@@ -46,6 +47,25 @@ async def test_type_text_passes_through_text(server, client: AsyncMock) -> None:
     client.type_text.return_value = {"status": "ok", "length": 5}
     await server.call_tool("type_text", {"text": "hello"})
     client.type_text.assert_called_once_with("hello")
+
+
+@pytest.mark.asyncio
+async def test_type_text_logs_length_not_text(server, client: AsyncMock, caplog) -> None:
+    secret = "s3cr3t-password"
+    client.type_text.return_value = {"status": "ok", "length": len(secret)}
+    with caplog.at_level(logging.INFO, logger="journeycapture_mcp.server"):
+        await server.call_tool("type_text", {"text": secret})
+    assert secret not in caplog.text
+    assert f"{len(secret)} character" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_click_mouse_logs_call(server, client: AsyncMock, caplog) -> None:
+    client.click_mouse.return_value = {"status": "ok"}
+    with caplog.at_level(logging.INFO, logger="journeycapture_mcp.server"):
+        await server.call_tool("click_mouse", {"clicks": 2, "x": 100, "y": 200})
+    assert "click_mouse" in caplog.text
+    assert "clicks=2" in caplog.text
 
 
 @pytest.mark.asyncio

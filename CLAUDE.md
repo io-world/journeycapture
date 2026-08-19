@@ -157,7 +157,15 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
   or a file path — the one endpoint needing translation rather than a passthrough.
   Parameterized by `client` (rather than importing a module-level singleton) so tests
   can pass an `AsyncMock` and call `server.call_tool(name, args)` directly, in-process,
-  with no real network or HTTP transport involved.
+  with no real network or HTTP transport involved. Every tool logs its name and
+  arguments before calling `client` (same privacy carve-out as the thin client's own
+  `/keyboard/type` route: `type_text` logs the character count, never the text) — this
+  is what to check if something looks wrong, e.g. whether a double-click actually
+  arrived as one `clicks=2` call or as two separate single clicks too far apart to
+  register as a real double-click on the Windows side.
+- **`logging_setup.py`** — same console + rotating-file-handler pattern as
+  `journeycapture_thinclient.logging_setup`, writing to `journeycapture-mcp.log` next
+  to wherever the command was run from.
 - **`__init__.main()`** — the `journeycapture-mcp` console-script entry point: loads
   config, builds the client and server, calls
   `server.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)`.

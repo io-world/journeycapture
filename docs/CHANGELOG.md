@@ -2,6 +2,28 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — MCP server: log every tool call; add click/double-click test script
+
+Prompted by a suspected double-click issue: live-tested it directly against the real
+Windows box (new `scripts/click_test.py`) and a single `clicks=2` request worked
+correctly on the first try — no bug found in the click path itself. But there was no
+way to check what actually got sent to the MCP server in the first place, so the
+likely real explanation (two separate single-click calls arriving too far apart to
+register as an OS-level double-click, rather than one `clicks=2` call) couldn't be
+confirmed either way.
+
+- `journeycapture_mcp` now logs every tool call (name + arguments) before executing
+  it, to both console and a new rotating `journeycapture-mcp.log` file
+  (`logging_setup.py`, same pattern as the thin client's own). `type_text` logs the
+  character count only, never the typed text. This is what to check next time
+  something looks off — e.g. whether a click arrived as one `clicks=2` call or two
+  separate ones.
+- Added `scripts/click_test.py`: single-clicks then double-clicks a target point
+  (default: the Chrome desktop icon), saving before/after screenshots so the
+  select-vs-launch difference can be checked visually.
+- Added 2 tests to `tests/test_mcp_server.py` for the new logging behavior — 55
+  tests total, up from 53.
+
 ## 2026-08-19 — MCP server: --config file, no more required env vars
 
 `journeycapture_mcp/config.py`'s `load_settings()` now accepts an optional
