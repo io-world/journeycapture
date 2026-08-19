@@ -39,6 +39,10 @@ An MCP server exposing this API as tools for MCP-aware assistants — runs on th
 controller machine, separately from `journeycapture.exe`. See
 [docs/MCP_SERVER.md](docs/MCP_SERVER.md).
 
+## Dependencies
+
+See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for what each library is used for.
+
 ## Changelog
 
 See [docs/CHANGELOG.md](docs/CHANGELOG.md) for notable changes over time.
