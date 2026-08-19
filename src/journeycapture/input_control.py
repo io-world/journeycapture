@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 import threading
 import time
-from typing import Literal
+from typing import Callable, Literal
 
 from pynput.keyboard import Controller as KeyboardController
 from pynput.keyboard import Key, KeyCode
 from pynput.mouse import Button, Controller as MouseController
+
+logger = logging.getLogger(__name__)
 
 _mouse = MouseController()
 _keyboard = KeyboardController()
@@ -17,6 +20,39 @@ _BUTTONS = {
     "right": Button.right,
     "middle": Button.middle,
 }
+
+# How long a button/key can be held (action="down"/"press") before it's released
+# automatically if no matching "up"/"release" request ever arrives — caps the blast
+# radius of a dropped request leaving input stuck on the remote machine.
+_AUTO_RELEASE_SECONDS = 10.0
+
+_held_buttons: dict[Button, threading.Timer] = {}
+_held_keys: dict[Key | KeyCode, threading.Timer] = {}
+
+
+def _cancel_pending_release(store: dict, key: object) -> None:
+    timer = store.pop(key, None)
+    if timer is not None:
+        timer.cancel()
+
+
+def _schedule_auto_release(store: dict, key: object, release: Callable[[], None]) -> None:
+    _cancel_pending_release(store, key)
+
+    def _fire() -> None:
+        with _lock:
+            if store.get(key) is not timer:
+                return  # cancelled/replaced by an explicit release before we got the lock
+            store.pop(key, None)
+            release()
+        logger.warning(
+            "auto-released %r after %.0fs with no matching release request", key, _AUTO_RELEASE_SECONDS
+        )
+
+    timer = threading.Timer(_AUTO_RELEASE_SECONDS, _fire)
+    timer.daemon = True
+    store[key] = timer
+    timer.start()
 
 
 def move_mouse(x: int, y: int, relative: bool = False) -> tuple[int, int]:
@@ -44,7 +80,9 @@ def click_mouse(
             _mouse.click(btn, clicks)
         elif action == "down":
             _mouse.press(btn)
+            _schedule_auto_release(_held_buttons, btn, lambda: _mouse.release(btn))
         elif action == "up":
+            _cancel_pending_release(_held_buttons, btn)
             _mouse.release(btn)
 
 
@@ -76,8 +114,10 @@ def send_keys(keys: list[str], action: Literal["press", "release", "tap"] = "tap
         if action == "press":
             for key in resolved:
                 _keyboard.press(key)
+                _schedule_auto_release(_held_keys, key, lambda k=key: _keyboard.release(k))
         elif action == "release":
             for key in resolved:
+                _cancel_pending_release(_held_keys, key)
                 _keyboard.release(key)
         elif action == "tap":
             for key in resolved:

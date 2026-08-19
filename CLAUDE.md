@@ -71,6 +71,24 @@ without re-verifying against a live instance. `\n` in typed text is translated t
 `Key.enter` by `pynput` automatically (see `pynput`'s `_CONTROL_CODES`), so no special
 handling is needed to end typed text with a return.
 
+### Every command is logged; held input auto-releases
+
+Every mouse/keyboard/screenshot route logs one line (endpoint, source IP, and the
+relevant params) before acting, via each route module's own `logging.getLogger(__name__)`
+— reaches both the console and the rotating log file through the root-logger handlers
+`logging_setup.configure_logging` already sets up, so nothing extra is needed to see it.
+`/keyboard/type` logs the character *count* only, never the text itself, since that
+could be a password or other sensitive content. `/health` is deliberately not logged —
+it's a liveness ping, not a remote-control command.
+
+`click_mouse`/`send_keys`'s `action="down"`/`"press"` (holding a button/key across
+separate requests, e.g. for a drag) auto-release after `_AUTO_RELEASE_SECONDS` (10s) if
+the matching `"up"`/`"release"` never arrives, so a dropped request can't leave input
+stuck on the remote machine indefinitely. `action="tap"` (the default, and everything
+the test suite and live-testing scripts use) presses and releases within the same call
+and never touches this — only an explicit `down`/`press` schedules a timer. See
+`tests/test_input_control.py` for how this is tested without waiting on the real timeout.
+
 ### Testing against a real Windows instance
 
 Since `pynput`/`mss` behavior and the packaged `.exe` can only be fully verified on
@@ -86,7 +104,7 @@ testing, run from any machine that can reach the Windows box (never on the box i
   center plus one relative move, checking the API's reported position against what
   was requested at each step.
 
-All three read connection defaults (`host`, `port`, `api_key`, etc.) from
+All four read connection defaults (`host`, `port`, `api_key`, etc.) from
 `scripts/config.json`, which is gitignored (contains the real API key) — there's no
 committed example for it, so recreate it locally with the field names each script's
 `--help` documents.

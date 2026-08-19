@@ -32,3 +32,7 @@ All routes require an `X-API-Key` header and a source IP present in `allowed_ips
 
 See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) — must be built on Windows.
 Manual verification checklist: [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_TEST.md).
+
+## Changelog
+
+See [docs/CHANGELOG.md](docs/CHANGELOG.md) for notable changes over time.

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from journeycapture import capture
 from journeycapture.schemas import MonitorInfo
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,6 +31,12 @@ def screenshot(
     resolved_format = format or config.screenshot.format
     resolved_quality = quality if quality is not None else config.screenshot.quality
     resolved_monitor = monitor if monitor is not None else config.screenshot.monitor
+    logger.info(
+        "screenshot monitor=%d format=%s from %s",
+        resolved_monitor,
+        resolved_format,
+        request.client.host if request.client else None,
+    )
     try:
         image_bytes, content_type = capture.take_screenshot(
             monitor=resolved_monitor,

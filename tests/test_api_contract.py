@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -88,6 +89,16 @@ def test_keyboard_type(client: TestClient, auth_headers: dict[str, str]) -> None
         response = client.post("/keyboard/type", json={"text": "hello"}, headers=auth_headers)
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "length": 5}
+
+
+def test_keyboard_type_logs_length_not_text(client: TestClient, auth_headers: dict[str, str], caplog) -> None:
+    secret = "s3cr3t-password"
+    with caplog.at_level(logging.INFO, logger="journeycapture.routes.keyboard"):
+        with patch("journeycapture.routes.keyboard.input_control.type_text", return_value=len(secret)):
+            response = client.post("/keyboard/type", json={"text": secret}, headers=auth_headers)
+    assert response.status_code == 200
+    assert secret not in caplog.text
+    assert f"{len(secret)} character" in caplog.text
 
 
 def test_keyboard_type_too_long(client: TestClient, auth_headers: dict[str, str]) -> None:
