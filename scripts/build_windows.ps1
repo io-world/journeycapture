@@ -52,8 +52,10 @@ if (-not $SkipTests) {
 }
 
 # -- 4. Build exe ---------------------------------------------------------------
-# Read version via Python so no string-parsing edge cases can break the name
-$Version = uv run python -c "from importlib.metadata import version; print(version('journeycapture'))"
+# Read version straight from pyproject.toml (via Python's tomllib) so it always
+# reflects the current source file, even if `uv sync` hasn't reinstalled since a
+# version bump.
+$Version = uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
 if (-not $Version) { Fail "Could not read package version." }
 $ExeName = "journeycapture-$Version"
 Step "Building dist\${ExeName}.exe (PyInstaller)"
