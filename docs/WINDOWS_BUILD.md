@@ -6,16 +6,33 @@ GitHub Actions runner). All commands below are PowerShell, run on Windows.
 
 ## 0. Get the code onto the Windows machine
 
-This repo has no git remote configured yet, so copy the project folder over by
-whatever means is convenient (USB drive, network share, zip + transfer, etc.) — the
-whole `JourneyCapture` directory except `.venv/` if it exists. Then open PowerShell
-and `cd` into it:
-
 ```powershell
-cd C:\path\to\JourneyCapture
+git clone https://github.com/io-world/journeycapture.git
+cd journeycapture
 ```
 
-## 1. Install prerequisites
+(Or `git pull` if you already have a checkout there.)
+
+## 1. One-shot build
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+```
+
+This does everything through step 6 below in one command: installs `uv` if it's
+missing, runs `uv sync`, runs the test suite (`uv run pytest -q`, aborting the build on
+failure — pass `-SkipTests` to bypass), builds `dist\journeycapture-<version>.exe` with
+PyInstaller (version read from `pyproject.toml` via
+`importlib.metadata.version("journeycapture")`, so the exe name always matches the
+installed package version), and copies `config.example.json` → `dist\config.json` if
+one isn't already there. Pass `-OpenDist` to have it open `dist\` in Explorer when
+done.
+
+Skip to [step 6](#6-set-up-configjson-next-to-the-exe) to configure and run it. The
+manual steps below are what the script automates — use them if you need to customize
+the PyInstaller invocation (e.g. adding a `--hidden-import`).
+
+## 2. Install prerequisites (manual)
 
 - **Python 3.11+**: not strictly required up front — `uv` can download and manage it
   for you — but having it doesn't hurt.
@@ -25,7 +42,7 @@ cd C:\path\to\JourneyCapture
   ```
   Then restart the PowerShell window so `uv` is on `PATH`.
 
-## 2. Install dependencies
+## 3. Install dependencies (manual)
 
 ```powershell
 uv sync
@@ -34,7 +51,7 @@ uv sync
 This creates `.venv` and installs everything from `pyproject.toml`/`uv.lock`, including
 the `pyinstaller` dev dependency.
 
-## 3. (Optional but recommended) Run the test suite first
+## 4. Run the test suite first (manual)
 
 ```powershell
 uv run pytest -q
@@ -43,7 +60,7 @@ uv run pytest -q
 All 24 tests should pass — they run cross-platform with `mss`/`pynput` mocked, so this
 is a good sanity check that the checkout is intact before spending time on a build.
 
-## 4. Build the executable
+## 5. Build the executable (manual)
 
 ```powershell
 uv run pyinstaller --onefile --console --name journeycapture packaging/run.py
@@ -54,20 +71,15 @@ uv run pyinstaller --onefile --console --name journeycapture packaging/run.py
   file logging (`journeycapture.log`) has been proven sufficient on its own.
 - This produces `dist\journeycapture.exe`, plus a `build\` scratch directory and a
   generated `journeycapture.spec` in the repo root — both are gitignored/disposable.
-
-## 5. Verify the build picked up native dependencies correctly
-
-Run the exe once (see step 6 for config setup first) and exercise `/screenshot`,
-`/mouse/*`, and `/keyboard/*`. `pynput` ships a PyInstaller hook in recent versions and
-should Just Work; `mss` needs no special hook (pure `ctypes` against `user32`/`gdi32`).
-If either mouse/keyboard control or screenshots fail with an import error at runtime,
-add the missing module explicitly:
-
-```powershell
-uv run pyinstaller --onefile --console --name journeycapture --hidden-import <module> packaging/run.py
-```
+- If mouse/keyboard control or screenshots fail with an import error at runtime,
+  `pynput` ships its own PyInstaller hook and should Just Work; `mss` needs no special
+  hook (pure `ctypes` against `user32`/`gdi32`). Otherwise add the missing module
+  explicitly with `--hidden-import <module>`.
 
 ## 6. Set up config.json next to the exe
+
+`build_windows.ps1` does this for you if `dist\config.json` doesn't already exist. To
+do it by hand:
 
 ```powershell
 Copy-Item config.example.json dist\config.json
@@ -82,27 +94,30 @@ allowlist — this is deliberate.
 
 ```powershell
 cd dist
-.\journeycapture.exe
+.\journeycapture-<version>.exe
 ```
 
 Check for a Windows Firewall prompt on first launch (allow it if you want remote
 machines to reach it), and confirm `journeycapture.log` is being written next to the
 exe.
 
-## 8. Save the spec for reproducible future builds
-
-Once the `--hidden-import` flags (if any) are dialed in, save the final PyInstaller
-command into `packaging/journeycapture.spec` so future builds are one command:
+## 8. Publish a release (optional)
 
 ```powershell
-Move-Item journeycapture.spec packaging\journeycapture.spec -Force
-uv run pyinstaller packaging\journeycapture.spec
+gh release create v<version> "dist\journeycapture-<version>.exe" --title v<version> --notes "..."
 ```
+
+**Remember to rebuild and publish a new release after any change to
+`input_control.py`, `capture.py`, or other runtime code** — a published release is a
+frozen artifact; pulling the latest source on the Windows box doesn't update an
+already-built/running `.exe`, and re-running `build_windows.ps1` doesn't re-publish the
+release on its own.
 
 ## Next: functional testing
 
 The build succeeding doesn't mean mouse/keyboard/screenshot behavior is correct —
-walk through [WINDOWS_SMOKE_TEST.md](WINDOWS_SMOKE_TEST.md) next.
+walk through [WINDOWS_SMOKE_TEST.md](WINDOWS_SMOKE_TEST.md) next, or use the
+`scripts/*.py` live-testing scripts from a controller machine (see `CLAUDE.md`).
 
 ## Known friction
 
@@ -114,6 +129,6 @@ not something the Python code can fix.
 ## Optional: CI builds instead of a personal Windows box
 
 A `windows-latest` GitHub Actions workflow running the same `uv sync` +
-`pyinstaller` steps and uploading the exe as a build artifact removes the need to do
-this manually on every release. Not set up yet (this repo has no git remote) — ask if
-you want one added later.
+`build_windows.ps1` steps and uploading the exe as a build artifact (or publishing a
+release directly) removes the need to do this manually on every release. Not set up
+yet — ask if you want one added.
