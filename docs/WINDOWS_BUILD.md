@@ -22,11 +22,20 @@ powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 This does everything through step 6 below in one command: installs `uv` if it's
 missing, runs `uv sync`, runs the test suite (`uv run pytest -q`, aborting the build on
 failure — pass `-SkipTests` to bypass), builds `dist\journeycapture-<version>.exe` with
-PyInstaller (version read from `pyproject.toml` via
-`importlib.metadata.version("journeycapture")`, so the exe name always matches the
-installed package version), and copies `config.example.json` → `dist\config.json` if
-one isn't already there. Pass `-OpenDist` to have it open `dist\` in Explorer when
-done.
+PyInstaller (version read straight from `pyproject.toml`'s `[project].version` via
+Python's `tomllib`, so the exe name always matches the source file even if `uv sync`
+hasn't reinstalled since a version bump), and copies `config.example.json` →
+`dist\config.json` if one isn't already there. Pass `-OpenDist` to have it open
+`dist\` in Explorer when done.
+
+If you open a fresh PowerShell window to run this, it starts in your user home
+directory (or `system32` if launched some other way), not the repo — `cd` into the
+repo first, or the script/`.venv` paths below won't resolve:
+
+```powershell
+cd "C:\Users\me\OneDrive\Desktop\JourneyCapture"
+.\scripts\build_windows.ps1
+```
 
 Skip to [step 6](#6-set-up-configjson-next-to-the-exe) to configure and run it. The
 manual steps below are what the script automates — use them if you need to customize
@@ -125,6 +134,33 @@ A onefile exe that opens a listening port and drives mouse/keyboard matches the
 heuristic signature of a RAT. Expect Windows Defender/AV flags and a first-run Firewall
 prompt. Code-signing and/or AV exclusions may be needed for real deployment — this is
 not something the Python code can fix.
+
+## Troubleshooting
+
+**`Access is denied` deleting a `journeycapture-<version>.dist-info` folder during
+`uv sync`.** This repo lives under `OneDrive\Desktop\JourneyCapture` for most
+contributors, and OneDrive's sync engine grabs a file handle on newly-written files
+right as `uv` tries to delete/replace them during a reinstall — a race, not a real
+permissions problem. Fix by rebuilding `.venv` from scratch:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+.\scripts\build_windows.ps1
+```
+
+(`.venv` is gitignored/disposable — `uv sync` recreates it.) If you were in an
+activated venv when this happened, run `deactivate` first. To stop this recurring on
+future builds, either exclude `.venv` from OneDrive sync (OneDrive Settings → Sync and
+backup → manage the folder's backup/exclusions), or point `uv` at a venv location
+outside OneDrive via the `UV_PROJECT_ENVIRONMENT` env var.
+
+**A PowerShell window running the script closes immediately on error, before you can
+read what failed.** This happens when the script is launched in a way that closes its
+host window on exit (e.g. double-clicking the `.ps1`, or some "Run with PowerShell"
+shortcuts) rather than run inside a window that stays open. Run it from an already-open
+PowerShell window instead (`cd` to the repo, then `.\scripts\build_windows.ps1`), or
+capture output to a file to inspect after the fact: `.\scripts\build_windows.ps1 *>&1 |
+Tee-Object build_log.txt`.
 
 ## Optional: CI builds instead of a personal Windows box
 
