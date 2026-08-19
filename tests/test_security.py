@@ -5,8 +5,8 @@ from unittest.mock import Mock
 import pytest
 from fastapi import HTTPException
 
-from journeycapture.config import Config
-from journeycapture.security import make_verify_request
+from journeycapture_thinclient.config import Config
+from journeycapture_thinclient.security import make_verify_request
 
 
 def make_request(host: str) -> Mock:

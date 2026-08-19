@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from journeycapture.api import create_app
-from journeycapture.config import Config
+from journeycapture_thinclient.api import create_app
+from journeycapture_thinclient.config import Config
 
 API_KEY = "a" * 32
 ALLOWED_IP = "testclient"

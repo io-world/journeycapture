@@ -4,8 +4,8 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from journeycapture import input_control
-from journeycapture.schemas import (
+from journeycapture_thinclient import input_control
+from journeycapture_thinclient.schemas import (
     KeyboardKeyRequest,
     KeyboardTypeRequest,
     KeyboardTypeResponse,

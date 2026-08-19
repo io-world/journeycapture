@@ -4,7 +4,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import APIRouter
 
-from journeycapture.schemas import HealthResponse
+from journeycapture_thinclient.schemas import HealthResponse
 
 router = APIRouter()
 

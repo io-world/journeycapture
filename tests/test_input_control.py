@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from journeycapture import input_control
+from journeycapture_thinclient import input_control
 
 
 @pytest.fixture(autouse=True)

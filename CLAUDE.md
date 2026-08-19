@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two components in one repo, meant to run on two different machines:
 
-- **`journeycapture`** — a Windows thin client exposing a local REST API
+- **`journeycapture_thinclient`** — a Windows thin client exposing a local REST API
   (FastAPI/uvicorn) for remote mouse/keyboard control and desktop screenshot capture.
   The server code is cross-platform Python, but it's only ever *run* as a packaged
   `.exe` on a real Windows desktop — mouse/keyboard injection (`pynput`) and
@@ -32,20 +32,20 @@ Server config: copy `config.example.json` to `config.json`, set a real `api_key`
 (min 16 chars) and non-empty `allowed_ips`. Config path resolution order: `--config
 PATH` CLI arg → `JOURNEYCAPTURE_CONFIG` env var → `config.json` next to the executable
 (or CWD when run from source). The server refuses to start on a missing/invalid config
-(see `journeycapture.config.load_config`).
+(see `journeycapture_thinclient.config.load_config`).
 
 There is no lint/format command configured in this repo.
 
 ## Architecture
 
-- **`journeycapture.server`** — entry point (`main()`). Loads config, sets up logging,
+- **`journeycapture_thinclient.server`** — entry point (`main()`). Loads config, sets up logging,
   calls `winutil.set_dpi_awareness()` (Windows-only, no-op elsewhere), builds the
   FastAPI app, runs it with uvicorn.
-- **`journeycapture.api.create_app`** — wires a single `Depends` security gate
+- **`journeycapture_thinclient.api.create_app`** — wires a single `Depends` security gate
   (`security.make_verify_request`) onto every route in the app, then mounts the
   routers (`health`, `screenshot`, `mouse`, `keyboard`). There's no per-route auth —
   it's all-or-nothing at the app level.
-- **`journeycapture.security`** — `verify_request` checks source IP against
+- **`journeycapture_thinclient.security`** — `verify_request` checks source IP against
   `allowed_ips` *before* checking the API key (403 beats 401 — deliberate, see
   `test_disallowed_ip_checked_before_key`), using `secrets.compare_digest` for the key
   comparison. This gate is wired in as a FastAPI-level `Depends`, which does **not**
@@ -57,14 +57,14 @@ There is no lint/format command configured in this repo.
   (including the API key itself) is plaintext HTTP, an accepted tradeoff as long as
   the controller and the Windows box share a trusted network; revisit if that stops
   being true.
-- **`journeycapture.routes/*`** — thin FastAPI route handlers; all actual logic lives
+- **`journeycapture_thinclient.routes/*`** — thin FastAPI route handlers; all actual logic lives
   in `capture.py` (screenshots, via `mss` + Pillow) and `input_control.py`
   (mouse/keyboard, via `pynput`). Routes are mockable at the
-  `journeycapture.routes.<module>.<capture|input_control>.<fn>` path — that's the
+  `journeycapture_thinclient.routes.<module>.<capture|input_control>.<fn>` path — that's the
   patching convention `tests/test_api_contract.py` uses throughout.
-- **`journeycapture.config.Config`** — pydantic model with `extra="forbid"`, so an
+- **`journeycapture_thinclient.config.Config`** — pydantic model with `extra="forbid"`, so an
   unrecognized config key is a hard validation error, not a silent no-op.
-- **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture import
+- **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture_thinclient import
   main; main()`), kept as a separate file from `server.py` deliberately for the build.
 
 ### Keyboard typing is intentionally paced
@@ -130,7 +130,7 @@ via PyInstaller, copies `config.example.json` → `dist/config.json` if missing)
 
 ### `journeycapture_mcp` — the MCP server
 
-Lives in `src/journeycapture_mcp/`, a separate top-level package from `journeycapture`
+Lives in `src/journeycapture_mcp/`, a separate top-level package from `journeycapture_thinclient`
 in the same repo/pyproject (`[tool.uv.build-backend] module-name` lists both). Its
 dependencies (`mcp`, `httpx`) sit under the `mcp` optional-dependency group, not the
 base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
@@ -138,7 +138,7 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
 
 - **`config.py`** — reads `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY` from the
   environment at startup, fails fast with a clear stderr message if host/api_key are
-  missing (mirrors `journeycapture.config.load_config`'s fail-fast philosophy).
+  missing (mirrors `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
   REST API, one method per endpoint. Raises `JourneyCaptureError` on non-2xx
   responses, with the response body included (that's where FastAPI's 422 validation

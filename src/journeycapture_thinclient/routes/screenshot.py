@@ -5,8 +5,8 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
-from journeycapture import capture
-from journeycapture.schemas import MonitorInfo
+from journeycapture_thinclient import capture
+from journeycapture_thinclient.schemas import MonitorInfo
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from typing import Callable
 
 from fastapi import Header, HTTPException, Request
 
-from journeycapture.config import Config
+from journeycapture_thinclient.config import Config
 
 
 def make_verify_request(config: Config) -> Callable[..., None]:

@@ -6,10 +6,10 @@ import sys
 
 import uvicorn
 
-from journeycapture.api import create_app
-from journeycapture.config import ConfigError, load_config, resolve_config_path
-from journeycapture.logging_setup import configure_logging
-from journeycapture.winutil import set_dpi_awareness
+from journeycapture_thinclient.api import create_app
+from journeycapture_thinclient.config import ConfigError, load_config, resolve_config_path
+from journeycapture_thinclient.logging_setup import configure_logging
+from journeycapture_thinclient.winutil import set_dpi_awareness
 
 logger = logging.getLogger(__name__)
 
