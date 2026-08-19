@@ -41,7 +41,15 @@ There is no lint/format command configured in this repo.
 - **`journeycapture.security`** — `verify_request` checks source IP against
   `allowed_ips` *before* checking the API key (403 beats 401 — deliberate, see
   `test_disallowed_ip_checked_before_key`), using `secrets.compare_digest` for the key
-  comparison.
+  comparison. This gate is wired in as a FastAPI-level `Depends`, which does **not**
+  cover `/docs`, `/redoc`, or `/openapi.json` — FastAPI adds those as plain Starlette
+  routes outside the dependency-injection path, so they're reachable without the
+  API key or an allowlisted IP. Left this way deliberately (verified via `TestClient`)
+  so tooling — including an MCP server — can introspect the API shape without
+  credentials; only the ability to *act* is gated. There's also no TLS — traffic
+  (including the API key itself) is plaintext HTTP, an accepted tradeoff as long as
+  the controller and the Windows box share a trusted network; revisit if that stops
+  being true.
 - **`journeycapture.routes/*`** — thin FastAPI route handlers; all actual logic lives
   in `capture.py` (screenshots, via `mss` + Pillow) and `input_control.py`
   (mouse/keyboard, via `pynput`). Routes are mockable at the
@@ -74,6 +82,9 @@ testing, run from any machine that can reach the Windows box (never on the box i
 - `scripts/get_screenshot.py` — fetch one screenshot to a local file.
 - `scripts/send_text.py` — type a `TEXT` string (edit the constant at the top of the
   file) into whatever window has focus remotely.
+- `scripts/move_mouse.py` — walk the cursor through the primary monitor's corners and
+  center plus one relative move, checking the API's reported position against what
+  was requested at each step.
 
 All three read connection defaults (`host`, `port`, `api_key`, etc.) from
 `scripts/config.json`, which is gitignored (contains the real API key) — there's no

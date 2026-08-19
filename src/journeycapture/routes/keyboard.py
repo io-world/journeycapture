@@ -15,12 +15,14 @@ router = APIRouter()
 
 @router.post("/keyboard/type", response_model=KeyboardTypeResponse)
 def keyboard_type(body: KeyboardTypeRequest) -> KeyboardTypeResponse:
+    """Type printable text into whatever window has focus. For non-printable keys (Enter, Tab, Ctrl+C, etc.) use /keyboard/key instead — this endpoint only sends character keystrokes."""
     length = input_control.type_text(body.text)
     return KeyboardTypeResponse(length=length)
 
 
 @router.post("/keyboard/key", response_model=StatusResponse)
 def keyboard_key(body: KeyboardKeyRequest) -> StatusResponse:
+    """Send one or more named keys, e.g. special keys or chords like ctrl+c that /keyboard/type can't express."""
     try:
         input_control.send_keys(body.keys, action=body.action)
     except ValueError as e:

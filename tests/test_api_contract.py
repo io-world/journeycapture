@@ -73,11 +73,26 @@ def test_mouse_scroll(client: TestClient, auth_headers: dict[str, str]) -> None:
     mock_scroll.assert_called_once_with(dx=1, dy=-1)
 
 
+def test_mouse_scroll_out_of_range(client: TestClient, auth_headers: dict[str, str]) -> None:
+    response = client.post("/mouse/scroll", json={"dy": 1000}, headers=auth_headers)
+    assert response.status_code == 422
+
+
+def test_mouse_click_too_many_clicks(client: TestClient, auth_headers: dict[str, str]) -> None:
+    response = client.post("/mouse/click", json={"clicks": 100}, headers=auth_headers)
+    assert response.status_code == 422
+
+
 def test_keyboard_type(client: TestClient, auth_headers: dict[str, str]) -> None:
     with patch("journeycapture.routes.keyboard.input_control.type_text", return_value=5):
         response = client.post("/keyboard/type", json={"text": "hello"}, headers=auth_headers)
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "length": 5}
+
+
+def test_keyboard_type_too_long(client: TestClient, auth_headers: dict[str, str]) -> None:
+    response = client.post("/keyboard/type", json={"text": "a" * 4001}, headers=auth_headers)
+    assert response.status_code == 422
 
 
 def test_keyboard_key(client: TestClient, auth_headers: dict[str, str]) -> None:

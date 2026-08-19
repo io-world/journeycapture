@@ -16,4 +16,5 @@ except PackageNotFoundError:
 
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    """Liveness check. Returns ok plus the running server version."""
     return HealthResponse(version=_VERSION)

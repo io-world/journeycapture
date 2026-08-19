@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MonitorInfo(BaseModel):
@@ -23,9 +23,9 @@ class HealthResponse(BaseModel):
 
 
 class MouseMoveRequest(BaseModel):
-    x: int
-    y: int
-    relative: bool = False
+    x: int = Field(description="Target X coordinate. In absolute mode (default), (0, 0) is the primary monitor's top-left corner; monitors above/left of it have negative coordinates. In relative mode, this is a pixel offset from the current position.")
+    y: int = Field(description="Target Y coordinate. Same coordinate space as x.")
+    relative: bool = Field(default=False, description="If true, x/y are offsets from the current cursor position instead of absolute screen coordinates.")
 
 
 class MouseMoveResponse(StatusResponse):
@@ -36,18 +36,18 @@ class MouseMoveResponse(StatusResponse):
 class MouseClickRequest(BaseModel):
     button: Literal["left", "right", "middle"] = "left"
     action: Literal["click", "down", "up"] = "click"
-    clicks: int = 1
+    clicks: int = Field(default=1, ge=1, le=10, description="Number of clicks to send (e.g. 2 for a double-click).")
     x: int | None = None
     y: int | None = None
 
 
 class MouseScrollRequest(BaseModel):
-    dx: int = 0
-    dy: int = 0
+    dx: int = Field(default=0, ge=-100, le=100, description="Horizontal scroll in wheel notches (not pixels). Positive scrolls right, negative scrolls left.")
+    dy: int = Field(default=0, ge=-100, le=100, description="Vertical scroll in wheel notches (not pixels). Positive scrolls up, negative scrolls down.")
 
 
 class KeyboardTypeRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=4000, description="Text to type into whatever window currently has focus. Typed one character at a time with a small delay between each to avoid dropped keystrokes.")
 
 
 class KeyboardTypeResponse(StatusResponse):
@@ -55,5 +55,5 @@ class KeyboardTypeResponse(StatusResponse):
 
 
 class KeyboardKeyRequest(BaseModel):
-    keys: list[str]
-    action: Literal["press", "release", "tap"] = "tap"
+    keys: list[str] = Field(description="Key names to send together as a chord, e.g. [\"ctrl\", \"alt\", \"delete\"]. Each is either a single printable character or a pynput.keyboard.Key name (enter, tab, esc, backspace, space, shift, ctrl, alt, cmd, up, down, left, right, f1-f20, etc).")
+    action: Literal["press", "release", "tap"] = Field(default="tap", description="'tap' presses then releases all keys (default). 'press'/'release' hold or let go without the other half, for building a custom sequence across multiple requests.")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from typing import Literal
 
@@ -9,6 +10,7 @@ from pynput.mouse import Button, Controller as MouseController
 
 _mouse = MouseController()
 _keyboard = KeyboardController()
+_lock = threading.Lock()
 
 _BUTTONS = {
     "left": Button.left,
@@ -18,11 +20,12 @@ _BUTTONS = {
 
 
 def move_mouse(x: int, y: int, relative: bool = False) -> tuple[int, int]:
-    if relative:
-        _mouse.move(x, y)
-    else:
-        _mouse.position = (x, y)
-    pos = _mouse.position
+    with _lock:
+        if relative:
+            _mouse.move(x, y)
+        else:
+            _mouse.position = (x, y)
+        pos = _mouse.position
     return int(pos[0]), int(pos[1])
 
 
@@ -33,25 +36,28 @@ def click_mouse(
     x: int | None = None,
     y: int | None = None,
 ) -> None:
-    if x is not None and y is not None:
-        _mouse.position = (x, y)
-    btn = _BUTTONS[button]
-    if action == "click":
-        _mouse.click(btn, clicks)
-    elif action == "down":
-        _mouse.press(btn)
-    elif action == "up":
-        _mouse.release(btn)
+    with _lock:
+        if x is not None and y is not None:
+            _mouse.position = (x, y)
+        btn = _BUTTONS[button]
+        if action == "click":
+            _mouse.click(btn, clicks)
+        elif action == "down":
+            _mouse.press(btn)
+        elif action == "up":
+            _mouse.release(btn)
 
 
 def scroll_mouse(dx: int = 0, dy: int = 0) -> None:
-    _mouse.scroll(dx, dy)
+    with _lock:
+        _mouse.scroll(dx, dy)
 
 
 def type_text(text: str, interval: float = 0.01) -> int:
-    for char in text:
-        _keyboard.type(char)
-        time.sleep(interval)
+    with _lock:
+        for char in text:
+            _keyboard.type(char)
+            time.sleep(interval)
     return len(text)
 
 
@@ -66,14 +72,15 @@ def _resolve_key(name: str) -> Key | KeyCode:
 
 def send_keys(keys: list[str], action: Literal["press", "release", "tap"] = "tap") -> None:
     resolved = [_resolve_key(k) for k in keys]
-    if action == "press":
-        for key in resolved:
-            _keyboard.press(key)
-    elif action == "release":
-        for key in resolved:
-            _keyboard.release(key)
-    elif action == "tap":
-        for key in resolved:
-            _keyboard.press(key)
-        for key in reversed(resolved):
-            _keyboard.release(key)
+    with _lock:
+        if action == "press":
+            for key in resolved:
+                _keyboard.press(key)
+        elif action == "release":
+            for key in resolved:
+                _keyboard.release(key)
+        elif action == "tap":
+            for key in resolved:
+                _keyboard.press(key)
+            for key in reversed(resolved):
+                _keyboard.release(key)
