@@ -1,6 +1,29 @@
 # Manual smoke test (Windows only)
 
-These checks require a real Windows desktop session and cannot be automated from macOS.
+## Automated checks
+
+Once `journeycapture.exe` is running on the Windows box, run
+[`scripts/live_check.py`](../scripts/live_check.py) from any machine that can reach it
+(this dev machine, a teammate's laptop — not the Windows box itself):
+
+```
+uv run python scripts/live_check.py --host <windows-ip> --api-key <key>
+```
+
+This covers `/health`, wrong-key rejection (401), `/screenshot/monitors`, and
+`/screenshot` (saves a `.jpg` locally so you can visually confirm it matches the
+desktop). Add `--with-mouse` to also move the remote cursor as a round-trip check, and
+`--with-keyboard` to type a short benign string (types into whatever window currently
+has focus on the remote machine — use with care). Prints a pass/fail summary and exits
+non-zero on any failure.
+
+It does **not** cover IP-allowlist rejection (403) from a disallowed source, UIPI/elevated
+-window behavior, DPI-scaling coordinate correctness, or the Firewall/AV prompts — those
+still need the manual checks below.
+
+## Manual checks
+
+These require a real Windows desktop session and cannot be automated from macOS.
 
 1. Copy `config.example.json` to `config.json` next to `journeycapture.exe`, set a real
    `api_key`, and add your controller machine's IP to `allowed_ips`.

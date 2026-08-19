@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Literal
 
 from pynput.keyboard import Controller as KeyboardController
@@ -47,8 +48,10 @@ def scroll_mouse(dx: int = 0, dy: int = 0) -> None:
     _mouse.scroll(dx, dy)
 
 
-def type_text(text: str) -> int:
-    _keyboard.type(text)
+def type_text(text: str, interval: float = 0.01) -> int:
+    for char in text:
+        _keyboard.type(char)
+        time.sleep(interval)
     return len(text)
 
 
