@@ -2,6 +2,40 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Add fractional coordinates to the MCP mouse tools
+
+Live use surfaced a second form of the resolution-guessing bug, after the first fix
+landed. The model correctly checked `list_monitors` (1920×1080), but then reasoned
+that screenshot images "arrive in the chat rendered at a smaller display size
+(~1366×768)" and applied its own ~1.406× scale correction to its visual pixel
+estimate. It worked — both test clicks landed — but the reasoning doesn't hold up:
+how large an image *looks* in a chat UI is unrelated to the actual pixel data a
+vision model reasons over. Confirmed nothing in this codebase resizes the screenshot
+(`capture.py` returns the raw `mss` capture untouched); if a resize is happening at
+all, it's inside Anthropic's own vision preprocessing, which the model has no way to
+actually verify. Treated the two successful clicks as luck, not a validated
+technique, since the same failure shape (assumed number, no way to confirm it) was
+already what caused the original bug.
+
+- `journeycapture_mcp.server`'s `move_mouse` and `click_mouse` tools now accept
+  `fx`/`fy` (0.0–1.0, a fraction of the target monitor's width/height) as an
+  alternative to pixel `x`/`y`, plus `monitor` to pick which monitor they're relative
+  to. Resolved server-side via a new `_resolve_xy` helper that calls
+  `list_monitors()` and does the fraction→pixel math — a fraction is correct
+  regardless of what size the model actually perceived the screenshot at, no
+  scale-factor guessing required. Mutually exclusive with `x`/`y` per call; can't be
+  combined with `move_mouse`'s `relative=True`.
+- Scoped to the MCP layer only, not the REST API — avoids another Windows exe
+  rebuild/republish for a controller-side ergonomics fix, and mirrors the existing
+  layering where the MCP layer already translates things (e.g. `take_screenshot`
+  returning `Image` content).
+- 6 new tests in `tests/test_mcp_server.py` (conversion math, monitor selection, all
+  three validation-error cases) — 61 tests total, up from 55. Verified live against
+  the real Windows box: `fx=0.2568, fy=0.1213` resolved to `(493, 131)`, the same
+  pixel position independently verified correct earlier this session.
+- `CLAUDE.md`'s "Never assume the screen resolution" section and
+  `docs/MCP_SERVER.md` both updated with the fix and this incident.
+
 ## 2026-08-19 — Design decision: no UIA, screenshots stay primary
 
 Follow-up discussion after the coordinate/resolution bug: considered adding Windows

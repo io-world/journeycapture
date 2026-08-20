@@ -17,6 +17,37 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
         "chords, and capture screenshots. Call health_check first if unsure the target machine is reachable.",
     )
 
+    async def _resolve_xy(
+        x: int | None,
+        y: int | None,
+        fx: float | None,
+        fy: float | None,
+        monitor: int | None,
+        *,
+        allow_neither: bool = False,
+    ) -> tuple[int | None, int | None]:
+        if (x is None) != (y is None):
+            raise ValueError("x and y must be given together.")
+        if (fx is None) != (fy is None):
+            raise ValueError("fx and fy must be given together.")
+        have_xy = x is not None
+        have_fxy = fx is not None
+        if have_xy and have_fxy:
+            raise ValueError("Provide either x/y or fx/fy, not both.")
+        if not have_xy and not have_fxy:
+            if allow_neither:
+                return None, None
+            raise ValueError("Provide either x/y (pixel coordinates) or fx/fy (fraction of the screen, 0.0-1.0).")
+        if have_xy:
+            return x, y
+        monitors = await client.list_monitors()
+        index = monitor if monitor is not None else (1 if len(monitors) > 1 else 0)
+        try:
+            target = monitors[index]
+        except IndexError:
+            raise ValueError(f"monitor index {index} out of range (0..{len(monitors) - 1})") from None
+        return target["left"] + round(fx * target["width"]), target["top"] + round(fy * target["height"])
+
     @server.tool()
     async def health_check() -> dict:
         """Check whether the journeycapture instance is reachable and report its version."""
@@ -41,10 +72,30 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
         return Image(data=data, format=image_format)
 
     @server.tool()
-    async def move_mouse(x: int, y: int, relative: bool = False) -> dict:
-        """Move the cursor to an absolute screen position, or by a relative offset. (0, 0) is the primary monitor's top-left corner; monitors above/left of it have negative coordinates. Returns the resulting position — check it against what was requested."""
-        logger.info("move_mouse x=%d y=%d relative=%s", x, y, relative)
-        return await client.move_mouse(x, y, relative=relative)
+    async def move_mouse(
+        x: int | None = None,
+        y: int | None = None,
+        fx: float | None = None,
+        fy: float | None = None,
+        monitor: int | None = None,
+        relative: bool = False,
+    ) -> dict:
+        """Move the cursor to an absolute screen position (x/y in pixels, or fx/fy as a fraction 0.0-1.0 of the target monitor's width/height), or by a relative offset (x/y only). (0, 0) is the primary monitor's top-left corner; monitors above/left of it have negative coordinates. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at, unlike guessing a pixel number against an assumed resolution. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1); fx/fy can't be combined with relative=True. Returns the resulting position — check it against what was requested."""
+        if relative:
+            if fx is not None or fy is not None:
+                raise ValueError(
+                    "fx/fy can't be combined with relative=True — a fraction of the screen isn't meaningful as a relative offset."
+                )
+            if x is None or y is None:
+                raise ValueError("x and y are required when relative=True.")
+            resolved_x, resolved_y = x, y
+        else:
+            resolved_x, resolved_y = await _resolve_xy(x, y, fx, fy, monitor)
+        logger.info(
+            "move_mouse x=%s y=%s fx=%s fy=%s monitor=%s relative=%s -> resolved (%s, %s)",
+            x, y, fx, fy, monitor, relative, resolved_x, resolved_y,
+        )
+        return await client.move_mouse(resolved_x, resolved_y, relative=relative)
 
     @server.tool()
     async def click_mouse(
@@ -53,10 +104,17 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
         clicks: int = 1,
         x: int | None = None,
         y: int | None = None,
+        fx: float | None = None,
+        fy: float | None = None,
+        monitor: int | None = None,
     ) -> dict:
-        """Click a mouse button, optionally moving to x/y first. Use action=down/up (instead of the default click) to hold a button across separate calls, e.g. for a drag — an unmatched down auto-releases after ~10s on the server."""
-        logger.info("click_mouse button=%s action=%s clicks=%d x=%s y=%s", button, action, clicks, x, y)
-        return await client.click_mouse(button=button, action=action, clicks=clicks, x=x, y=y)
+        """Click a mouse button, optionally moving to x/y (pixels) or fx/fy (fraction 0.0-1.0 of the target monitor's width/height) first — omit all four to click at the current cursor position. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1). Use action=down/up (instead of the default click) to hold a button across separate calls, e.g. for a drag — an unmatched down auto-releases after ~10s on the server."""
+        resolved_x, resolved_y = await _resolve_xy(x, y, fx, fy, monitor, allow_neither=True)
+        logger.info(
+            "click_mouse button=%s action=%s clicks=%d x=%s y=%s fx=%s fy=%s monitor=%s -> resolved x=%s y=%s",
+            button, action, clicks, x, y, fx, fy, monitor, resolved_x, resolved_y,
+        )
+        return await client.click_mouse(button=button, action=action, clicks=clicks, x=resolved_x, y=resolved_y)
 
     @server.tool()
     async def scroll_mouse(dx: int = 0, dy: int = 0) -> dict:

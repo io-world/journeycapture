@@ -7,6 +7,8 @@ import pytest
 
 pytest.importorskip("mcp")  # controller-side-only extra; not installed for the Windows thin-client build
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from journeycapture_mcp.server import build_server
 
 
@@ -66,6 +68,58 @@ async def test_click_mouse_logs_call(server, client: AsyncMock, caplog) -> None:
         await server.call_tool("click_mouse", {"clicks": 2, "x": 100, "y": 200})
     assert "click_mouse" in caplog.text
     assert "clicks=2" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_click_mouse_with_fractional_coordinates(server, client: AsyncMock) -> None:
+    client.list_monitors.return_value = [
+        {"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080},
+        {"index": 1, "left": 0, "top": 0, "width": 1920, "height": 1080},
+    ]
+    client.click_mouse.return_value = {"status": "ok"}
+    await server.call_tool("click_mouse", {"fx": 0.25, "fy": 0.5})
+    client.click_mouse.assert_called_once_with(button="left", action="click", clicks=1, x=480, y=540)
+
+
+@pytest.mark.asyncio
+async def test_move_mouse_with_fractional_coordinates(server, client: AsyncMock) -> None:
+    client.list_monitors.return_value = [
+        {"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080},
+        {"index": 1, "left": 0, "top": 0, "width": 1920, "height": 1080},
+    ]
+    client.move_mouse.return_value = {"status": "ok", "x": 960, "y": 540}
+    await server.call_tool("move_mouse", {"fx": 0.5, "fy": 0.5})
+    client.move_mouse.assert_called_once_with(960, 540, relative=False)
+
+
+@pytest.mark.asyncio
+async def test_fractional_coordinates_use_specified_monitor(server, client: AsyncMock) -> None:
+    client.list_monitors.return_value = [
+        {"index": 0, "left": 0, "top": 0, "width": 3840, "height": 1080},
+        {"index": 1, "left": 0, "top": 0, "width": 1920, "height": 1080},
+        {"index": 2, "left": 1920, "top": 0, "width": 1920, "height": 1080},
+    ]
+    client.click_mouse.return_value = {"status": "ok"}
+    await server.call_tool("click_mouse", {"fx": 0.5, "fy": 0.5, "monitor": 2})
+    client.click_mouse.assert_called_once_with(button="left", action="click", clicks=1, x=2880, y=540)
+
+
+@pytest.mark.asyncio
+async def test_click_mouse_both_xy_and_fxfy_raises(server, client: AsyncMock) -> None:
+    with pytest.raises(ToolError, match="not both"):
+        await server.call_tool("click_mouse", {"x": 1, "y": 2, "fx": 0.1, "fy": 0.1})
+
+
+@pytest.mark.asyncio
+async def test_move_mouse_neither_xy_nor_fxfy_raises(server, client: AsyncMock) -> None:
+    with pytest.raises(ToolError, match="Provide either"):
+        await server.call_tool("move_mouse", {})
+
+
+@pytest.mark.asyncio
+async def test_move_mouse_fxfy_with_relative_raises(server, client: AsyncMock) -> None:
+    with pytest.raises(ToolError, match="relative"):
+        await server.call_tool("move_mouse", {"fx": 0.1, "fy": 0.1, "relative": True})
 
 
 @pytest.mark.asyncio

@@ -93,6 +93,20 @@ standard resolution. `journeycapture_mcp`'s `list_monitors`/`take_screenshot` to
 docstrings and `screenshot_monitors`'s OpenAPI description both say this explicitly
 for the same reason. See `docs/CHANGELOG.md`'s "Fix the actual root cause" entry.
 
+This trap turned out to have a second form even after that fix landed: an MCP client
+correctly checked `list_monitors`, then still miscalculated because it reasoned that
+the screenshot image "renders smaller in the chat" than its real dimensions and tried
+to derive its own scale-factor correction — conflating how big an image *looks* in a
+UI with the actual pixel data a model reasons over, which are unrelated. It happened
+to land two clicks correctly; there was no way for the model to actually verify the
+scale factor it invented, so treat that as luck, not a validated technique. The real
+fix, in `journeycapture_mcp.server`: `move_mouse`/`click_mouse` accept `fx`/`fy`
+(0.0–1.0, a fraction of the target monitor) as an alternative to pixel `x`/`y`. A
+fraction is correct regardless of what size the model actually perceived the image
+at — no scale-factor guessing needed, ever. Prefer `fx`/`fy` over `x`/`y` whenever a
+target was identified visually from a screenshot. See `docs/MCP_SERVER.md`'s
+"Fractional coordinates" section and `docs/CHANGELOG.md`'s corresponding entry.
+
 ### Screenshot/pixel control is deliberate, not a limitation to patch
 
 UI Automation (UIA)-based element targeting — asking Windows directly "where is the

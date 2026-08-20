@@ -117,6 +117,28 @@ reference in `CLAUDE.md`'s architecture section applies here too.
 `take_screenshot` returns MCP image content (base64-encoded), not a file path or raw
 bytes — nothing is written to disk on the controller side.
 
+### Fractional coordinates (`fx`/`fy`)
+
+`move_mouse` and `click_mouse` both accept `fx`/`fy` (floats, 0.0–1.0) as an
+alternative to pixel `x`/`y` — a fraction of the target monitor's width/height
+instead of a raw pixel number. `monitor` picks which monitor they're relative to
+(defaults to the primary physical monitor, `list_monitors` index 1).
+
+Use `fx`/`fy` whenever the target was identified visually from a `take_screenshot`
+result, instead of estimating a pixel coordinate. This isn't just convenience: a
+model has no reliable way to know what resolution an image was actually rendered at
+by the time it reasons about it (chat UIs and vision pipelines can both resize images
+before/while a model looks at them), so a pixel guess is really a guess about an
+unknown scale factor wearing the model's confidence as camouflage. A fraction of the
+image is correct regardless of what size the model actually perceived it at — the
+server does the real-pixel conversion using `list_monitors`' actual dimensions. See
+`CLAUDE.md`'s "Never assume the screen resolution" section for the incident that
+prompted this.
+
+`x`/`y` and `fx`/`fy` are mutually exclusive per call (pick one), and `fx`/`fy` can't
+be combined with `move_mouse`'s `relative=True` — a fraction of the screen isn't a
+meaningful concept for a relative offset.
+
 ## Testing
 
 `tests/test_mcp_client.py` and `tests/test_mcp_server.py` require the `mcp` extra;
