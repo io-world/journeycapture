@@ -32,7 +32,7 @@ uv sync --extra broker     # also install deps for the broker (controller-side o
 uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
 uv run journeycapture      # run the thin client from source (needs config.json - see below)
 uv run journeycapture-broker --config broker_config.json  # run the broker
-uv run journeycapture-mcp --config scripts/mcp_config.json  # run the MCP server
+uv run journeycapture-mcp --config scripts/config.json  # run the MCP server
 uv run pytest -q           # run the full test suite
 uv run pytest tests/test_config.py::test_valid_config_parses_with_defaults  # run a single test
 ```
@@ -196,18 +196,16 @@ itself):
 - `scripts/move_mouse.py` — walk the cursor through the primary monitor's corners and
   center plus one relative move, checking the reported position against what was
   requested at each step.
+- `scripts/click_test.py` — single-click vs double-click at a fixed point, saving
+  before/after screenshots so you can visually confirm a single click selects without
+  launching and a double click launches.
 
-**Not yet updated for the broker** (tracked, not forgotten): these five scripts still
-build requests like `{host}/mouse/click` directly against the retired thin-client REST
-shape. They need to route through the broker instead
-(`{broker_host}/machines/{machine_id}/mouse/click`) before they'll work again — same
-pattern as `journeycapture_mcp.client`'s update, just applied to each script. Until
-that lands, use `journeycapture_mcp`'s tools directly (or the broker's HTTP API by
-hand) for live verification instead.
-
-All (once migrated) read connection defaults from `scripts/config.json`, which is
-gitignored (contains real API keys) — there's no committed example for it, so
-recreate it locally with the field names each script's `--help` documents.
+All five route through the broker (`{broker_scheme}://{broker_host}:{broker_port}/machines/{machine_id}/...`),
+not the thin client directly — the thin client's own REST API is retired (see above).
+They read connection defaults from `scripts/config.json`, which is gitignored
+(contains real API keys) — there's no committed example for it, so recreate it
+locally with the field names each script's `--help` documents (`broker_host`,
+`broker_port`, `broker_scheme`, `machine_id`, `broker_api_key`).
 
 Manual-only checks that can't be scripted from macOS (DPI-scaling coordinate
 correctness, UIPI/elevated-window behavior, Firewall/AV prompts) are in

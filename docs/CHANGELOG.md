@@ -2,6 +2,27 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-20 — scripts/*.py route through the broker (phase 3/4)
+
+Follow-up to phase 2: the five live-testing scripts (`live_check.py`,
+`get_screenshot.py`, `send_text.py`, `move_mouse.py`, `click_test.py`) still built
+requests directly against the retired thin-client REST shape — the last callers of
+that shape. Updated all five to the same pattern phase 2 applied to `journeycapture_mcp`.
+
+- Each script: `--host`/`--port`/`--scheme`/`--api-key` (one machine) → `--broker-host`/
+  `--broker-port`/`--broker-scheme`/`--machine` (one broker, many machines), with
+  `--api-key` now meaning the broker's own key. Config fallbacks read the matching
+  `broker_host`/`broker_port`/`broker_scheme`/`machine_id`/`broker_api_key` keys from
+  `scripts/config.json`.
+- `base_url` now includes `/machines/{machine}`; every individual request path inside
+  each script (`/mouse/move`, `/screenshot`, `/keyboard/type`, etc.) is unchanged,
+  since those are relative paths joined onto the machine-scoped base URL.
+- No change to any script's actual test logic/flow — purely a base-URL and config-field
+  change, verified by re-reading each rewritten file against its original.
+- 81 tests passing (unchanged — scripts aren't covered by the automated suite).
+- `CLAUDE.md`'s "not yet updated for the broker" caveat removed now that all five
+  route through it; `click_test.py` (previously undocumented) added to the script list.
+
 ## 2026-08-20 — journeycapture_mcp routes through the broker (phase 2/4)
 
 Follow-up to the broker/phase 1 entry below: updated `journeycapture_mcp` to talk to

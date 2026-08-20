@@ -1,13 +1,13 @@
-"""Smoke-test a running journeycapture instance over the network.
+"""Smoke-test a machine through a running broker, over the network.
 
-Run this from any machine that can reach the Windows box (this dev machine, a
-teammate's laptop, etc.) — it never runs on the target itself. Exercises
-/health, /screenshot/monitors, /screenshot, and optionally the mouse/keyboard
-routes, and prints a pass/fail summary.
+Run this from any machine that can reach the broker (this dev machine, a
+teammate's laptop, etc.) — it never runs on the broker or the thin client itself.
+Exercises health, monitors, screenshot, and optionally the mouse/keyboard routes for
+one machine behind the broker, and prints a pass/fail summary.
 
 Usage:
-    uv run python scripts/live_check.py --host 192.168.1.50 --api-key <key>
-    uv run python scripts/live_check.py --host 192.168.1.50 --api-key <key> --with-mouse --with-keyboard
+    uv run python scripts/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc
+    uv run python scripts/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc --with-mouse --with-keyboard
 """
 
 from __future__ import annotations
@@ -39,13 +39,14 @@ class Results:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--host", required=True, help="IP or hostname of the journeycapture instance")
-    parser.add_argument("--port", type=int, default=8443)
-    parser.add_argument("--scheme", default="http", choices=["http", "https"])
+    parser.add_argument("--broker-host", required=True, help="IP or hostname of the broker")
+    parser.add_argument("--broker-port", type=int, default=8600)
+    parser.add_argument("--broker-scheme", default="http", choices=["http", "https"])
+    parser.add_argument("--machine", required=True, help="machine_id to test, as configured on the broker")
     parser.add_argument(
         "--api-key",
-        default=os.environ.get("JOURNEYCAPTURE_API_KEY"),
-        help="Defaults to the JOURNEYCAPTURE_API_KEY env var",
+        default=os.environ.get("JOURNEYCAPTURE_BROKER_API_KEY"),
+        help="The broker's own api_key. Defaults to the JOURNEYCAPTURE_BROKER_API_KEY env var",
     )
     parser.add_argument("--out-dir", default=".", help="Where to save the fetched screenshot")
     parser.add_argument("--timeout", type=float, default=10.0)
@@ -62,13 +63,13 @@ def parse_args() -> argparse.Namespace:
     )
     args = parser.parse_args()
     if not args.api_key:
-        parser.error("--api-key is required (or set JOURNEYCAPTURE_API_KEY)")
+        parser.error("--api-key is required (or set JOURNEYCAPTURE_BROKER_API_KEY)")
     return args
 
 
 def main() -> int:
     args = parse_args()
-    base_url = f"{args.scheme}://{args.host}:{args.port}"
+    base_url = f"{args.broker_scheme}://{args.broker_host}:{args.broker_port}/machines/{args.machine}"
     headers = {"X-API-Key": args.api_key}
     results = Results()
 
@@ -95,7 +96,7 @@ def main() -> int:
 
 
 def check_health(client: httpx.Client, headers: dict, results: Results) -> None:
-    print("GET /health")
+    print("GET .../health")
     try:
         resp = client.get("/health", headers=headers)
         if resp.status_code == 200 and resp.json().get("status") == "ok":
@@ -107,7 +108,7 @@ def check_health(client: httpx.Client, headers: dict, results: Results) -> None:
 
 
 def check_auth_rejection(client: httpx.Client, results: Results) -> None:
-    print("GET /health with wrong API key (expect 401)")
+    print("GET .../health with wrong broker API key (expect 401)")
     try:
         resp = client.get("/health", headers={"X-API-Key": "definitely-wrong-key"})
         if resp.status_code == 401:
@@ -119,7 +120,7 @@ def check_auth_rejection(client: httpx.Client, results: Results) -> None:
 
 
 def check_monitors(client: httpx.Client, headers: dict, results: Results) -> list[dict]:
-    print("GET /screenshot/monitors")
+    print("GET .../screenshot/monitors")
     try:
         resp = client.get("/screenshot/monitors", headers=headers)
         if resp.status_code == 200 and resp.json():
@@ -133,7 +134,7 @@ def check_monitors(client: httpx.Client, headers: dict, results: Results) -> lis
 
 
 def check_screenshot(client: httpx.Client, headers: dict, out_dir: Path, results: Results) -> None:
-    print("GET /screenshot")
+    print("GET .../screenshot")
     try:
         resp = client.get("/screenshot", headers=headers)
         if resp.status_code != 200:
@@ -150,7 +151,7 @@ def check_screenshot(client: httpx.Client, headers: dict, out_dir: Path, results
 
 
 def check_mouse(client: httpx.Client, headers: dict, monitors: list[dict], results: Results) -> None:
-    print("POST /mouse/move (round trip)")
+    print("POST .../mouse/move (round trip)")
     monitor = monitors[1] if len(monitors) > 1 else (monitors[0] if monitors else None)
     if monitor is None:
         results.fail("mouse move", "no monitor info available to compute a target coordinate")
@@ -169,7 +170,7 @@ def check_mouse(client: httpx.Client, headers: dict, monitors: list[dict], resul
 
 
 def check_keyboard(client: httpx.Client, headers: dict, results: Results) -> None:
-    print("POST /keyboard/type ('journeycapture-live-check')")
+    print("POST .../keyboard/type ('journeycapture-live-check')")
     text = "journeycapture-live-check"
     try:
         resp = client.post("/keyboard/type", headers=headers, json={"text": text})

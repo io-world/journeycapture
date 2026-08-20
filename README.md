@@ -52,7 +52,7 @@ See [docs/BROKER.md](docs/BROKER.md) for the HTTP API and how routing works.
 
 ```
 uv sync --extra mcp
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/config.json
 ```
 
 See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options, the `machine`

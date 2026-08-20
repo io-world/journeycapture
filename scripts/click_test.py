@@ -1,8 +1,8 @@
-"""Test single-click vs double-click behavior on a running journeycapture instance.
+"""Test single-click vs double-click behavior on a machine through a running broker.
 
-Run this from any machine that can reach the Windows box — it never runs on the
-target itself. Moves to TARGET_X/TARGET_Y (edit these — default is wherever your
-Chrome desktop icon sits), single-clicks it, screenshots, waits past the OS
+Run this from any machine that can reach the broker — it never runs on the broker or
+the thin client itself. Moves to TARGET_X/TARGET_Y (edit these — default is wherever
+your Chrome desktop icon sits), single-clicks it, screenshots, waits past the OS
 double-click threshold, deselects, then double-clicks it and screenshots again. Saves
 before/after/after-double screenshots locally so you can visually confirm: a single
 click should select/highlight the icon without launching anything; a double click
@@ -48,23 +48,30 @@ def load_config() -> dict:
 def parse_args() -> argparse.Namespace:
     config = load_config()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--host", default=config.get("host"), help="IP or hostname of the journeycapture instance")
-    parser.add_argument("--port", type=int, default=config.get("port", 8443))
-    parser.add_argument("--scheme", default=config.get("scheme", "http"), choices=["http", "https"])
+    parser.add_argument(
+        "--broker-host", default=config.get("broker_host"), help="IP or hostname of the broker"
+    )
+    parser.add_argument("--broker-port", type=int, default=config.get("broker_port", 8600))
+    parser.add_argument("--broker-scheme", default=config.get("broker_scheme", "http"), choices=["http", "https"])
+    parser.add_argument("--machine", default=config.get("machine_id"), help="machine_id to target, as configured on the broker")
     parser.add_argument(
         "--api-key",
-        default=config.get("api_key") or os.environ.get("JOURNEYCAPTURE_API_KEY"),
-        help=f"Defaults to {CONFIG_PATH.name}'s api_key, then the JOURNEYCAPTURE_API_KEY env var",
+        default=config.get("broker_api_key") or os.environ.get("JOURNEYCAPTURE_BROKER_API_KEY"),
+        help=f"The broker's own api_key. Defaults to {CONFIG_PATH.name}'s broker_api_key, then the JOURNEYCAPTURE_BROKER_API_KEY env var",
     )
     parser.add_argument("--x", type=int, default=TARGET_X, help="Target X coordinate")
     parser.add_argument("--y", type=int, default=TARGET_Y, help="Target Y coordinate")
     parser.add_argument("--timeout", type=float, default=config.get("timeout", 10.0))
     args = parser.parse_args()
 
-    if not args.host:
-        parser.error(f"--host is required (or set 'host' in {CONFIG_PATH.name})")
+    if not args.broker_host:
+        parser.error(f"--broker-host is required (or set 'broker_host' in {CONFIG_PATH.name})")
+    if not args.machine:
+        parser.error(f"--machine is required (or set 'machine_id' in {CONFIG_PATH.name})")
     if not args.api_key:
-        parser.error(f"--api-key is required (or set 'api_key' in {CONFIG_PATH.name}, or JOURNEYCAPTURE_API_KEY)")
+        parser.error(
+            f"--api-key is required (or set 'broker_api_key' in {CONFIG_PATH.name}, or JOURNEYCAPTURE_BROKER_API_KEY)"
+        )
     return args
 
 
@@ -87,7 +94,7 @@ def click(client: httpx.Client, headers: dict, x: int, y: int, clicks: int) -> N
 
 def main() -> int:
     args = parse_args()
-    base_url = f"{args.scheme}://{args.host}:{args.port}"
+    base_url = f"{args.broker_scheme}://{args.broker_host}:{args.broker_port}/machines/{args.machine}"
     headers = {"X-API-Key": args.api_key}
 
     with httpx.Client(base_url=base_url, timeout=args.timeout) as client:

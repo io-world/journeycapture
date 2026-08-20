@@ -28,7 +28,7 @@ falls back to the environment variables.
 **File** (`--config PATH`):
 
 ```
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/config.json
 ```
 
 Recognized keys: `broker_host`, `broker_api_key` (both required — `broker_api_key`
@@ -65,7 +65,7 @@ This server speaks MCP over **streamable HTTP**, not stdio — you start it your
 separately from your MCP client, and it keeps running until you stop it:
 
 ```
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/config.json
 ```
 
 By default it binds `127.0.0.1:8000` — loopback only, so nothing off this machine can
