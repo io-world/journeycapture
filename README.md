@@ -36,8 +36,15 @@ Manual verification checklist: [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_T
 ## MCP server
 
 An MCP server exposing this API as tools for MCP-aware assistants — runs on the
-controller machine, separately from `journeycapture.exe`. See
-[docs/MCP_SERVER.md](docs/MCP_SERVER.md).
+controller machine, separately from `journeycapture.exe`.
+
+```
+uv sync --extra mcp
+uv run journeycapture-mcp --config scripts/config.json
+```
+
+See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options and wiring it
+into an MCP client.
 
 ## Dependencies
 
