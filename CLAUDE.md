@@ -63,7 +63,10 @@ There is no lint/format command configured in this repo.
   `journeycapture_thinclient.routes.<module>.<capture|input_control>.<fn>` path — that's the
   patching convention `tests/test_api_contract.py` uses throughout.
 - **`journeycapture_thinclient.config.Config`** — pydantic model with `extra="forbid"`, so an
-  unrecognized config key is a hard validation error, not a silent no-op.
+  unrecognized config key is a hard validation error, not a silent no-op. Same
+  philosophy in `schemas.py`: `MouseClickRequest` has a `model_validator` rejecting a
+  lone `x` or `y` (must be given together, or both omitted) with a 422 — it used to
+  silently ignore a partial pair and click at the current cursor position instead.
 - **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture_thinclient import
   main; main()`), kept as a separate file from `server.py` deliberately for the build.
 

@@ -84,6 +84,25 @@ def test_mouse_click_too_many_clicks(client: TestClient, auth_headers: dict[str,
     assert response.status_code == 422
 
 
+def test_mouse_click_partial_xy_rejected(client: TestClient, auth_headers: dict[str, str]) -> None:
+    response = client.post("/mouse/click", json={"x": 100}, headers=auth_headers)
+    assert response.status_code == 422
+
+
+def test_mouse_click_neither_xy_is_fine(client: TestClient, auth_headers: dict[str, str]) -> None:
+    with patch("journeycapture_thinclient.routes.mouse.input_control.click_mouse") as mock_click:
+        response = client.post("/mouse/click", json={}, headers=auth_headers)
+    assert response.status_code == 200
+    mock_click.assert_called_once_with(button="left", action="click", clicks=1, x=None, y=None)
+
+
+def test_mouse_click_both_xy_is_fine(client: TestClient, auth_headers: dict[str, str]) -> None:
+    with patch("journeycapture_thinclient.routes.mouse.input_control.click_mouse") as mock_click:
+        response = client.post("/mouse/click", json={"x": 100, "y": 200}, headers=auth_headers)
+    assert response.status_code == 200
+    mock_click.assert_called_once_with(button="left", action="click", clicks=1, x=100, y=200)
+
+
 def test_keyboard_type(client: TestClient, auth_headers: dict[str, str]) -> None:
     with patch("journeycapture_thinclient.routes.keyboard.input_control.type_text", return_value=5):
         response = client.post("/keyboard/type", json={"text": "hello"}, headers=auth_headers)

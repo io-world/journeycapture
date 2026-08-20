@@ -2,6 +2,19 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Reject a lone x or y on /mouse/click instead of silently ignoring it
+
+The other item from the earlier "what else should I know about" audit. `/mouse/click`
+took `x`/`y` as independently-optional fields; if a caller sent just one (a malformed
+request), `input_control.click_mouse` silently skipped the move entirely and clicked
+wherever the cursor already was — no error, no signal anything was wrong. Fixed at the
+schema layer: `MouseClickRequest` now has a `model_validator` requiring `x`/`y`
+together or both omitted, returning a clear 422 instead. 3 new tests (partial pair
+rejected, neither given is fine, both given is fine) — 68 tests total, up from 65.
+Like the earlier keystroke-pacing and audit-logging fixes, this needs a Windows exe
+rebuild+republish to actually take effect — it's a `journeycapture_thinclient` change,
+not `journeycapture_mcp`.
+
 ## 2026-08-19 — Cap and prune saved screenshots
 
 Found during a broader "what else should I know about" audit: `save_screenshots`
