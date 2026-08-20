@@ -153,7 +153,10 @@ testing, run from any machine that can reach the Windows box (never on the box i
 
 - `scripts/live_check.py` — full smoke test: `/health`, wrong-key 401, monitors,
   screenshot, optional `--with-mouse`/`--with-keyboard` round trips.
-- `scripts/get_screenshot.py` — fetch one screenshot to a local file.
+- `scripts/get_screenshot.py` — fetch one screenshot, saved as a timestamped file
+  under `screenshot_dir` (same config key/default `journeycapture_mcp`'s optional
+  local-saving feature uses, so both land in one shared folder) unless `--out` gives
+  an exact path.
 - `scripts/send_text.py` — type a `TEXT` string (edit the constant at the top of the
   file) into whatever window has focus remotely.
 - `scripts/move_mouse.py` — walk the cursor through the primary monitor's corners and

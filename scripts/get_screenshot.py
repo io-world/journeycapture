@@ -6,11 +6,15 @@ target itself.
 Reads defaults from config.json next to this script (same file used by
 send_text.py). Any CLI flag overrides the matching config value, so it also
 works with no config file at all, e.g. run unmodified from VS Code's Run
-button once the config file has host/api_key filled in:
+button once the config file has host/api_key filled in. Saves into
+screenshot_dir (same config key and default the MCP server's optional
+local-saving feature uses, so both land in one shared folder) with a
+timestamped filename, unless --out gives an exact path:
 
     uv run python scripts/get_screenshot.py
     uv run python scripts/get_screenshot.py --host 192.168.1.50 --api-key <key>
-    uv run python scripts/get_screenshot.py --monitor 1 --format png --out desktop.png
+    uv run python scripts/get_screenshot.py --monitor 1 --format png --dir shots
+    uv run python scripts/get_screenshot.py --out desktop.png
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -50,7 +55,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--quality", type=int, default=config.get("quality"), help="JPEG quality 1-100 (default: server config)"
     )
-    parser.add_argument("--out", default=config.get("out"), help="Output file path (default: screenshot.<ext>)")
+    parser.add_argument(
+        "--dir", default=config.get("screenshot_dir", "screenshots"), help="Directory to save into"
+    )
+    parser.add_argument("--out", default=None, help="Exact output file path, overrides --dir/timestamp naming")
     parser.add_argument("--timeout", type=float, default=config.get("timeout", 10.0))
     args = parser.parse_args()
 
@@ -88,8 +96,14 @@ def main() -> int:
         return 1
 
     content_type = resp.headers.get("content-type", "")
-    ext = "png" if "png" in content_type else "jpg"
-    out_path = Path(args.out) if args.out else Path(f"screenshot.{ext}")
+    ext = "png" if "png" in content_type else "jpeg"
+    if args.out:
+        out_path = Path(args.out)
+    else:
+        out_dir = Path(args.dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+        out_path = out_dir / f"{timestamp}.{ext}"
     out_path.write_bytes(resp.content)
     print(f"saved {len(resp.content)} bytes to {out_path}")
     return 0

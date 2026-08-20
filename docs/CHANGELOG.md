@@ -2,6 +2,19 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Unify get_screenshot.py's output with screenshot_dir
+
+`get_screenshot.py`'s `output_file` config key (a single fixed filename, always
+overwritten) was redundant now that `scripts/config.json` already has
+`screenshot_dir` from the MCP server's local-saving feature added just before this.
+Removed `output_file`; the script now saves into `screenshot_dir` with a timestamped
+filename (matching `journeycapture_mcp/server.py`'s `_save_screenshot` naming format
+exactly), so manually-fetched screenshots and MCP-auto-saved ones land in one shared
+folder instead of two different places with two different config keys. `--out` still
+works as a CLI-only exact-path override for one-off cases; `--dir` is new for
+overriding just the directory. Verified live against the real Windows box, including
+the `--out` override path.
+
 ## 2026-08-19 — Optional local screenshot saving in the MCP server
 
 `take_screenshot` can now also save a timestamped copy locally, for debugging what a
