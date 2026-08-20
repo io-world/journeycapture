@@ -66,8 +66,12 @@ the `pyinstaller` dev dependency.
 uv run pytest -q
 ```
 
-All 24 tests should pass — they run cross-platform with `mss`/`pynput` mocked, so this
-is a good sanity check that the checkout is intact before spending time on a build.
+They run cross-platform with `mss`/`pynput` mocked, so this is a good sanity check
+that the checkout is intact before spending time on a build. A plain `uv sync` doesn't
+install the `mcp`/`broker` extras (those are controller-side only — see
+`docs/DEPENDENCIES.md`), so tests that need them are skipped automatically
+(`pytest.importorskip`), not failed — a run showing some `s` alongside passes is
+expected on Windows, not a problem.
 
 ## 5. Build the executable (manual)
 
@@ -95,9 +99,13 @@ Copy-Item config.example.json dist\config.json
 notepad dist\config.json
 ```
 
-Edit it: set a real, long random `api_key`, and put your controller machine's IP(s) in
-`allowed_ips`. The server will refuse to start with the placeholder key or an empty
-allowlist — this is deliberate.
+Edit it: set `broker_host`/`broker_port` to point at the broker this machine should
+connect to, `machine_id` to a name unique among that broker's configured machines, and
+`api_key` to match that `machine_id`'s key in the broker's own `machines` config (see
+`docs/BROKER.md`) — the broker rejects the connection if either doesn't match. The exe
+refuses to start on invalid/incomplete config (a placeholder key that's too short, a
+missing `machine_id`) — this is deliberate, same fail-fast philosophy as the rest of
+the system.
 
 ## 7. Run it
 
@@ -106,9 +114,11 @@ cd dist
 .\journeycapture-<version>.exe
 ```
 
-Check for a Windows Firewall prompt on first launch (allow it if you want remote
-machines to reach it), and confirm `journeycapture.log` is being written next to the
-exe.
+This machine only ever connects *out* to the broker (a websocket client, not a
+listening server), so there's no inbound Firewall prompt to expect anymore — confirm
+it instead by checking `journeycapture.log` next to the exe for a successful broker
+connection, and `GET /machines` on the broker's HTTP API for this `machine_id`
+showing up as connected.
 
 ## 8. Publish a release (optional)
 
@@ -130,10 +140,10 @@ walk through [WINDOWS_SMOKE_TEST.md](WINDOWS_SMOKE_TEST.md) next, or use the
 
 ## Known friction
 
-A onefile exe that opens a listening port and drives mouse/keyboard matches the
-heuristic signature of a RAT. Expect Windows Defender/AV flags and a first-run Firewall
-prompt. Code-signing and/or AV exclusions may be needed for real deployment — this is
-not something the Python code can fix.
+A onefile exe that opens an outbound network connection and drives mouse/keyboard
+matches the heuristic signature of a RAT. Expect Windows Defender/AV flags. Code-
+signing and/or AV exclusions may be needed for real deployment — this is not something
+the Python code can fix.
 
 ## Troubleshooting
 

@@ -1,13 +1,22 @@
 # Manual smoke test (Windows only)
 
+This exercises `journeycapture.exe` through a running broker (`docs/BROKER.md`) — the
+thin client no longer accepts inbound connections directly, so a broker must be up and
+reachable from both the Windows box (outbound) and wherever you run the checks from.
+The broker can run anywhere reachable by both sides; it doesn't need to be on the
+Windows box itself.
+
 ## Automated checks
 
-Once `journeycapture.exe` is running on the Windows box, run
-[`scripts/live_check.py`](../scripts/live_check.py) from any machine that can reach it
-(this dev machine, a teammate's laptop — not the Windows box itself):
+Once a broker is running and `journeycapture.exe` on the Windows box is configured
+with that broker's `broker_host`/`broker_port` and a `machine_id`/`api_key` registered
+in the broker's own config, run
+[`scripts/live_check.py`](../scripts/live_check.py) from any machine that can reach
+the broker (this dev machine, a teammate's laptop — not the Windows box or the broker
+itself):
 
 ```
-uv run python scripts/live_check.py --host <windows-ip> --api-key <key>
+uv run python scripts/live_check.py --broker-host <broker-ip> --api-key <broker-key> --machine <machine-id>
 ```
 
 This covers `/health`, wrong-key rejection (401), `/screenshot/monitors`, and
@@ -17,36 +26,53 @@ desktop). Add `--with-mouse` to also move the remote cursor as a round-trip chec
 has focus on the remote machine — use with care). Prints a pass/fail summary and exits
 non-zero on any failure.
 
-It does **not** cover IP-allowlist rejection (403) from a disallowed source, UIPI/elevated
--window behavior, DPI-scaling coordinate correctness, or the Firewall/AV prompts — those
-still need the manual checks below.
+It does **not** cover a wrong `machine_id`/`api_key` at the thin-client-to-broker
+handshake, UIPI/elevated-window behavior, DPI-scaling coordinate correctness, or the
+AV flags on first launch — those still need the manual checks below.
 
 ## Manual checks
 
 These require a real Windows desktop session and cannot be automated from macOS.
 
-1. Copy `config.example.json` to `config.json` next to `journeycapture.exe`, set a real
-   `api_key`, and add your controller machine's IP to `allowed_ips`.
-2. Launch `journeycapture.exe`. Confirm it binds the configured port and writes to
-   `journeycapture.log`.
-3. `GET /health` with the `X-API-Key` header set correctly → `200 {"status": "ok", ...}`.
-4. `GET /health` with a wrong/missing key → `401`.
-5. `GET /health` from a machine/IP not in `allowed_ips` → `403`.
-6. `GET /screenshot/monitors` → sane monitor layout for the machine.
-7. `GET /screenshot` → capture bytes, open and visually confirm it matches the desktop.
-8. `POST /mouse/move` to a known coordinate → confirm the cursor lands there
-   (multi-monitor + DPI scaling: coordinates from a screenshot pixel should match where
-   the cursor actually goes).
-9. `POST /mouse/click` → confirm a click registers where expected.
-10. Open Notepad, `POST /keyboard/type` some text → confirm it appears correctly.
-11. `POST /keyboard/key` with `{"keys": ["ctrl", "alt", "delete"]}` behaves as an OS-level
-    combo (careful — this may lock the session; test last).
-12. Confirm UIPI behavior: input to an elevated window is blocked unless
+1. Copy `config.example.json` to `config.json` next to `journeycapture.exe`, set
+   `broker_host`/`broker_port` to the broker, and set `machine_id`/`api_key` to match
+   an entry in the broker's own `machines` config.
+2. Launch `journeycapture.exe`. Confirm `journeycapture.log` shows a successful
+   connection and handshake to the broker (not a listening socket — this machine only
+   ever connects out).
+3. Confirm the machine shows up: `GET /machines` on the broker (with the broker's
+   `X-API-Key`) should list this `machine_id`.
+4. Deliberately start it with a wrong `machine_id` or `api_key` (not registered on the
+   broker) → confirm the broker rejects the handshake and the exe logs a clear error,
+   then fix it back before continuing.
+5. `GET /machines/<machine-id>/health` with the broker's `X-API-Key` header set
+   correctly → `200 {"status": "ok", ...}`.
+6. Same request with a wrong/missing broker key → `401`.
+7. `GET /machines/<machine-id>/screenshot/monitors` → sane monitor layout for the
+   machine.
+8. `GET /machines/<machine-id>/screenshot` → capture bytes (raw binary, not
+   base64-in-JSON — see `docs/BROKER.md`), open and visually confirm it matches the
+   desktop.
+9. `POST /machines/<machine-id>/mouse/move` to a known coordinate → confirm the cursor
+   lands there (multi-monitor + DPI scaling: coordinates from a screenshot pixel
+   should match where the cursor actually goes).
+10. `POST /machines/<machine-id>/mouse/click` → confirm a click registers where
+    expected.
+11. Open Notepad, `POST /machines/<machine-id>/keyboard/type` some text → confirm it
+    appears correctly.
+12. `POST /machines/<machine-id>/keyboard/key` with `{"keys": ["ctrl", "alt",
+    "delete"]}` behaves as an OS-level combo (careful — this may lock the session;
+    test last).
+13. Confirm UIPI behavior: input to an elevated window is blocked unless
     `journeycapture.exe` itself is run as Administrator.
-13. Note any Windows Firewall prompt or antivirus flag on first launch.
+14. Note any antivirus flag on first launch (no Firewall prompt is expected anymore —
+    this machine makes only outbound connections to the broker).
+15. Stop the broker (or disconnect the network) while `journeycapture.exe` is running,
+    then restore it → confirm the log shows a reconnect-with-backoff rather than the
+    exe exiting, and that `GET /machines` shows it connected again afterward.
 
-Example request from PowerShell:
+Example request from PowerShell (run against the broker, not the Windows box):
 
 ```powershell
-Invoke-RestMethod -Uri "http://<host>:8443/health" -Headers @{ "X-API-Key" = "<key>" }
+Invoke-RestMethod -Uri "http://<broker-host>:8600/machines/<machine-id>/health" -Headers @{ "X-API-Key" = "<broker-key>" }
 ```

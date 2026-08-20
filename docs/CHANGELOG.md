@@ -2,6 +2,29 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-20 — Windows build/smoke-test docs updated for the broker (phase 4/4)
+
+Final phase of the broker rollout: `docs/WINDOWS_BUILD.md` and
+`docs/WINDOWS_SMOKE_TEST.md` still described the retired direct-REST topology
+(`allowed_ips`, a listening port, `--host <windows-ip>`). Most of this phase's
+originally-planned doc scope (`CLAUDE.md`, `docs/BROKER.md`, `docs/MCP_SERVER.md`,
+`docs/DEPENDENCIES.md`, `docs/CHANGELOG.md` itself) was already covered in phases 1–2,
+so this phase's remaining scope was narrower than planned.
+
+- `WINDOWS_BUILD.md`: config-setup step now describes `broker_host`/`machine_id`/
+  `api_key` instead of `allowed_ips`; "run it" step no longer expects an inbound
+  Firewall prompt (this machine only ever connects out to the broker now); test-count
+  step no longer hardcodes a stale number and explains why `mcp`/`broker`-extra tests
+  show as skipped on a plain `uv sync`; "known friction" no longer says "opens a
+  listening port."
+- `WINDOWS_SMOKE_TEST.md`: rewritten around the broker's `/machines/{id}/...` API
+  instead of hitting the thin client directly — adds explicit checks for the
+  broker connecting/handshake (wrong `machine_id`/`api_key` rejected, `GET /machines`
+  showing the connection) and for reconnect-with-backoff surviving a broker restart,
+  removes the now-nonexistent IP-allowlist (403) check.
+- This closes out the broker migration plan from `docs/CHANGELOG.md`'s phase 1 entry
+  below — all four phases now complete.
+
 ## 2026-08-20 — scripts/*.py route through the broker (phase 3/4)
 
 Follow-up to phase 2: the five live-testing scripts (`live_check.py`,
