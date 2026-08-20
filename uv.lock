@@ -404,14 +404,19 @@ name = "journeycapture"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "fastapi" },
     { name = "mss" },
     { name = "pillow" },
+    { name = "pydantic" },
     { name = "pynput" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.optional-dependencies]
+broker = [
+    { name = "fastapi" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
+]
 mcp = [
     { name = "httpx" },
     { name = "mcp" },
@@ -427,15 +432,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "fastapi", marker = "extra == 'broker'", specifier = ">=0.141.1" },
     { name = "httpx", marker = "extra == 'mcp'", specifier = ">=0.28.1" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.0.0" },
     { name = "mss", specifier = ">=10.2.0" },
     { name = "pillow", specifier = ">=12.3.0" },
+    { name = "pydantic", specifier = ">=2.0" },
     { name = "pynput", specifier = ">=1.8.2" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'broker'", specifier = ">=0.52.4" },
+    { name = "websockets", specifier = ">=13.0" },
+    { name = "websockets", marker = "extra == 'broker'", specifier = ">=13.0" },
 ]
-provides-extras = ["mcp"]
+provides-extras = ["mcp", "broker"]
 
 [package.metadata.requires-dev]
 dev = [

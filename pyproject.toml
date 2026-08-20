@@ -5,11 +5,11 @@ description = "Windows thin client exposing a local REST API for remote mouse/ke
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.141.1",
     "mss>=10.2.0",
     "pillow>=12.3.0",
+    "pydantic>=2.0",
     "pynput>=1.8.2",
-    "uvicorn[standard]>=0.52.4",
+    "websockets>=13.0",
 ]
 
 [project.optional-dependencies]
@@ -20,17 +20,26 @@ mcp = [
     "mcp>=2.0.0",
     "httpx>=0.28.1",
 ]
+# Controller-side only (runs the broker, not the Windows thin client) — same
+# reasoning as the mcp extra above. fastapi/uvicorn moved here from the base
+# dependencies now that the thin client no longer runs an HTTP server itself.
+broker = [
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
+    "websockets>=13.0",
+]
 
 [project.scripts]
 journeycapture = "journeycapture_thinclient:main"
 journeycapture-mcp = "journeycapture_mcp:main"
+journeycapture-broker = "journeycapture_broker:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = ["journeycapture_thinclient", "journeycapture_mcp"]
+module-name = ["journeycapture_thinclient", "journeycapture_mcp", "journeycapture_broker"]
 
 [dependency-groups]
 dev = [

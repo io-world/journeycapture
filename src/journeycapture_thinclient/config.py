@@ -16,10 +16,10 @@ class ScreenshotConfig(BaseModel, extra="forbid"):
 
 
 class Config(BaseModel, extra="forbid"):
-    host: str = "0.0.0.0"
-    port: int = Field(default=8443, ge=1, le=65535)
-    api_key: str = Field(min_length=16)
-    allowed_ips: list[str] = Field(min_length=1)
+    broker_host: str
+    broker_port: int = Field(default=8601, ge=1, le=65535)
+    machine_id: str = Field(min_length=1, description="Identifies this machine to the broker; must match one of the broker's configured machine IDs.")
+    api_key: str = Field(min_length=16, description="Must match this machine_id's key in the broker's own config.")
     screenshot: ScreenshotConfig = Field(default_factory=ScreenshotConfig)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     log_file: str = "journeycapture.log"
@@ -51,7 +51,7 @@ def load_config(path: Path) -> Config:
         raise ConfigError(
             f"Config file not found: {path}\n"
             "Copy config.example.json to config.json next to the executable, "
-            "set a real api_key, and list allowed_ips before running."
+            "set broker_host/machine_id/api_key to match the broker's config before running."
         )
     try:
         data = json.loads(path.read_text())

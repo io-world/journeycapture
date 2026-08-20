@@ -1,0 +1,10 @@
+{
+  "api_key": "replace-with-a-long-random-secret-for-mcp-to-use",
+  "machines": {
+    "replace-with-a-unique-machine-name": "replace-with-that-machine's-long-random-secret"
+  },
+  "host": "0.0.0.0",
+  "http_port": 8600,
+  "ws_host": "0.0.0.0",
+  "ws_port": 8601
+}

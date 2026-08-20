@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
 
-import uvicorn
-
-from journeycapture_thinclient.api import create_app
+from journeycapture_thinclient import ws_client
 from journeycapture_thinclient.config import ConfigError, load_config, resolve_config_path
 from journeycapture_thinclient.logging_setup import configure_logging
 from journeycapture_thinclient.winutil import set_dpi_awareness
@@ -35,9 +34,7 @@ def main() -> None:
 
     set_dpi_awareness()
 
-    app = create_app(config)
-
-    uvicorn.run(app, host=config.host, port=config.port, log_config=None)
+    asyncio.run(ws_client.run(config))
 
 
 if __name__ == "__main__":

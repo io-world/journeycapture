@@ -1,8 +1,8 @@
 {
-  "host": "0.0.0.0",
-  "port": 8443,
+  "broker_host": "192.168.1.10",
+  "broker_port": 8601,
+  "machine_id": "replace-with-a-unique-machine-name",
   "api_key": "replace-with-a-long-random-secret",
-  "allowed_ips": ["192.168.1.50"],
   "screenshot": {
     "format": "jpeg",
     "quality": 75,

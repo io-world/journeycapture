@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+
+pytest.importorskip("fastapi")  # controller-side-only extra; not installed for the Windows thin-client build
+
+from fastapi.testclient import TestClient
+
+from journeycapture_broker.config import Settings
+from journeycapture_broker.http_api import create_app
+from journeycapture_broker.registry import MachineError, MachineNotConnected, MachineTimeout
+
+API_KEY = "a" * 32
+
+
+@pytest.fixture
+def settings() -> Settings:
+    return Settings(api_key=API_KEY, machines={"office-pc": "b" * 32})
+
+
+@pytest.fixture
+def registry() -> Mock:
+    # connected_machines() is sync in the real ConnectionRegistry; only call() is
+    # async — a plain AsyncMock() would make both async, which breaks the sync route.
+    reg = Mock()
+    reg.call = AsyncMock()
+    return reg
+
+
+@pytest.fixture
+def client(settings: Settings, registry: Mock) -> TestClient:
+    app = create_app(settings, registry)
+    return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-API-Key": API_KEY}
+
+
+def test_requires_auth(client: TestClient) -> None:
+    response = client.get("/machines")
+    assert response.status_code == 401
+
+
+def test_list_machines(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.connected_machines.return_value = ["office-pc"]
+    response = client.get("/machines", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == ["office-pc"]
+
+
+def test_health(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.return_value = ({"status": "ok", "version": "0.2.0"}, None)
+    response = client.get("/machines/office-pc/health", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "version": "0.2.0"}
+    registry.call.assert_called_once_with("office-pc", "health", {})
+
+
+def test_machine_not_connected_returns_404(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.side_effect = MachineNotConnected("machine 'office-pc' is not connected")
+    response = client.get("/machines/office-pc/health", headers=auth_headers)
+    assert response.status_code == 404
+
+
+def test_machine_timeout_returns_504(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.side_effect = MachineTimeout("timed out")
+    response = client.get("/machines/office-pc/health", headers=auth_headers)
+    assert response.status_code == 504
+
+
+def test_machine_error_returns_400(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.side_effect = MachineError("bad params")
+    response = client.post("/machines/office-pc/keyboard/key", json={"keys": ["bogus"]}, headers=auth_headers)
+    assert response.status_code == 400
+
+
+def test_mouse_move(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.return_value = ({"status": "ok", "x": 10, "y": 20}, None)
+    response = client.post("/machines/office-pc/mouse/move", json={"x": 10, "y": 20}, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "x": 10, "y": 20}
+    registry.call.assert_called_once_with("office-pc", "mouse_move", {"x": 10, "y": 20, "relative": False})
+
+
+def test_mouse_click_partial_xy_rejected(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    response = client.post("/machines/office-pc/mouse/click", json={"x": 100}, headers=auth_headers)
+    assert response.status_code == 422
+    registry.call.assert_not_called()
+
+
+def test_screenshot_returns_raw_bytes(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.return_value = ({"content_type": "image/jpeg"}, b"fake-jpeg-bytes")
+    response = client.get("/machines/office-pc/screenshot", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.content == b"fake-jpeg-bytes"
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_keyboard_type(client: TestClient, auth_headers: dict, registry: Mock) -> None:
+    registry.call.return_value = ({"status": "ok", "length": 5}, None)
+    response = client.post("/machines/office-pc/keyboard/type", json={"text": "hello"}, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "length": 5}
