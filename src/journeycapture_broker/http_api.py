@@ -28,7 +28,12 @@ def create_app(settings: Settings, registry: ConnectionRegistry) -> FastAPI:
         if not x_api_key or not secrets.compare_digest(x_api_key, settings.api_key):
             raise HTTPException(status_code=401, detail="invalid or missing API key")
 
-    app = FastAPI(dependencies=[Depends(verify_api_key)])
+    # docs_url/redoc_url/openapi_url disabled: FastAPI's app-level `dependencies`
+    # doesn't cover these auto-added routes, so leaving them enabled would expose the
+    # full API schema with no X-API-Key check — unlike the MCP server (loopback-only
+    # by default), this broker's HTTP listener defaults to 0.0.0.0, so that gap would
+    # be reachable by default, not just in an unusual deployment.
+    app = FastAPI(dependencies=[Depends(verify_api_key)], docs_url=None, redoc_url=None, openapi_url=None)
 
     async def _call(machine_id: str, method: str, params: dict) -> tuple[dict, bytes | None]:
         try:

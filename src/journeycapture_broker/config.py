@@ -10,6 +10,17 @@ class ConfigError(Exception):
     pass
 
 
+_MIN_KEY_LENGTH = 16  # matches journeycapture_thinclient.config.Config.api_key's min_length
+
+
+def _validate_key_lengths(api_key: str, machines: dict[str, str]) -> None:
+    if len(api_key) < _MIN_KEY_LENGTH:
+        raise ConfigError(f"'api_key' must be at least {_MIN_KEY_LENGTH} characters")
+    for machine_id, key in machines.items():
+        if len(key) < _MIN_KEY_LENGTH:
+            raise ConfigError(f"machines[{machine_id!r}]'s key must be at least {_MIN_KEY_LENGTH} characters")
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str  # MCP-facing secret for the HTTP API
@@ -44,6 +55,11 @@ def _load_settings_from_file(path: Path) -> Settings:
         raise ConfigError(f"{path}: 'machines' is required — an object of machine_id: api_key pairs")
 
     try:
+        _validate_key_lengths(api_key, machines)
+    except ConfigError as e:
+        raise ConfigError(f"{path}: {e}") from e
+
+    try:
         return Settings(
             api_key=api_key,
             machines=dict(machines),
@@ -71,6 +87,8 @@ def _load_settings_from_env() -> Settings:
         machines = json.loads(machines_raw)
     except json.JSONDecodeError as e:
         raise ConfigError(f"JOURNEYCAPTURE_BROKER_MACHINES is not valid JSON: {e}") from e
+
+    _validate_key_lengths(api_key, machines)
 
     host = os.environ.get("JOURNEYCAPTURE_BROKER_HOST", "0.0.0.0")
     ws_host = os.environ.get("JOURNEYCAPTURE_BROKER_WS_HOST", "0.0.0.0")

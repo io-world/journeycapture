@@ -45,18 +45,18 @@ def _make_handler(settings: Settings, registry: ConnectionRegistry):
         try:
             async for raw in websocket:
                 if isinstance(raw, bytes):
-                    registry.handle_binary_frame(machine_id, raw)
+                    registry.handle_binary_frame(machine_id, websocket, raw)
                     continue
                 try:
                     message = json.loads(raw)
                 except json.JSONDecodeError:
                     logger.warning("ignoring malformed message from %s: %r", machine_id, raw)
                     continue
-                registry.handle_text_frame(machine_id, message)
+                registry.handle_text_frame(machine_id, websocket, message)
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            registry.unregister(machine_id)
+            registry.unregister(machine_id, websocket)
 
     return handler
 

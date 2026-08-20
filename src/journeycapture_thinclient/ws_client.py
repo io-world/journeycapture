@@ -32,6 +32,11 @@ class DispatchError(Exception):
     """Raised by a handler for a client-facing error (bad params, unknown key, etc.)."""
 
 
+class RegistrationRejected(Exception):
+    """The broker rejected our machine_id/api_key at the handshake — not recoverable
+    by reconnecting, since the credentials themselves are wrong."""
+
+
 def _handle_health(config: Config, params: dict) -> Any:
     return {"status": "ok", "version": _VERSION}
 
@@ -143,8 +148,7 @@ async def run(config: Config) -> None:
             await websocket.send(json.dumps({"machine_id": config.machine_id, "api_key": config.api_key}))
             ack = json.loads(await websocket.recv())
             if not ack.get("ok"):
-                logger.error("broker rejected registration: %s", ack.get("error"))
-                return
+                raise RegistrationRejected(ack.get("error", "broker rejected registration"))
 
             logger.info("registered with broker %s as machine_id=%s", uri, config.machine_id)
 

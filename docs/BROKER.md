@@ -45,13 +45,14 @@ the MCP server.
 }
 ```
 
-- `api_key` (required) — what the MCP server authenticates with, checked against
-  every `/machines/...` HTTP request's `X-API-Key` header. One key for the whole
-  broker, not per-machine.
-- `machines` (required, at least one entry) — `machine_id: api_key` pairs. Each thin
-  client's own `config.json` needs a matching `machine_id`/`api_key` to be accepted
-  when it connects. A thin client with an unknown `machine_id` or wrong key is
-  rejected at the websocket handshake, not silently ignored.
+- `api_key` (required, at least 16 characters) — what the MCP server authenticates
+  with, checked against every `/machines/...` HTTP request's `X-API-Key` header. One
+  key for the whole broker, not per-machine.
+- `machines` (required, at least one entry) — `machine_id: api_key` pairs, each key
+  also at least 16 characters. Each thin client's own `config.json` needs a matching
+  `machine_id`/`api_key` to be accepted when it connects. A thin client with an
+  unknown `machine_id` or wrong key is rejected at the websocket handshake, not
+  silently ignored.
 - `host`/`http_port` (default `0.0.0.0`/`8600`) — where the MCP-facing HTTP API
   listens.
 - `ws_host`/`ws_port` (default `0.0.0.0`/`8601`) — where thin clients connect.
@@ -85,6 +86,13 @@ All routes require `X-API-Key` matching the broker's own `api_key`.
 - `POST /machines/{id}/mouse/move`, `/mouse/click`, `/mouse/scroll`
 - `POST /machines/{id}/keyboard/type`, `/keyboard/key`
 
+FastAPI's interactive docs (`/docs`, `/redoc`, `/openapi.json`) are deliberately
+disabled (`create_app`'s `docs_url=None` etc.) rather than left on: those routes are
+added outside the app-level `dependencies` mechanism, so they'd bypass the `X-API-Key`
+check entirely and leak the full API schema to anyone who can reach the port — which,
+since `host` defaults to `0.0.0.0` (unlike the MCP server's loopback-only default),
+means anyone on the network by default, not just in an unusual deployment.
+
 Request/response shapes are identical to the thin client's original REST API — the
 broker reuses `journeycapture_thinclient.schemas` directly rather than duplicating
 them. A request for a machine id that isn't currently connected gets `404`; a machine
@@ -107,6 +115,14 @@ base64 anywhere. This only works because each connection is processed sequential
 on both ends (the thin client finishes one broker request, including sending both
 screenshot frames, before reading the next) — that's what makes "the next frame after
 this response" unambiguous without needing to embed a request id inside binary data.
+
+`ConnectionRegistry` is also identity-aware about which connection is current for a
+`machine_id`: `unregister`/`handle_text_frame`/`handle_binary_frame` all take the
+`websocket` object alongside the `machine_id` and no-op if it isn't the one currently
+registered. This matters for a fast reconnect (a thin client's network blips and it
+reconnects before the broker's old socket handler notices the first one died) — without
+this check, the old connection's delayed disconnect would evict the new, live
+connection from the registry out from under it.
 
 ## Testing
 

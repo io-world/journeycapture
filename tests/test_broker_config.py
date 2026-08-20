@@ -42,6 +42,18 @@ def test_missing_machines_raises(tmp_path: Path) -> None:
         load_settings(path)
 
 
+def test_short_api_key_raises(tmp_path: Path) -> None:
+    path = write_config(tmp_path, {"api_key": "tooshort", "machines": {"office-pc": "b" * 32}})
+    with pytest.raises(ConfigError, match="at least 16 characters"):
+        load_settings(path)
+
+
+def test_short_machine_key_raises(tmp_path: Path) -> None:
+    path = write_config(tmp_path, {"api_key": "a" * 32, "machines": {"office-pc": "short"}})
+    with pytest.raises(ConfigError, match="at least 16 characters"):
+        load_settings(path)
+
+
 def test_env_vars_used_when_no_config_path(monkeypatch) -> None:
     monkeypatch.setenv("JOURNEYCAPTURE_BROKER_API_KEY", "a" * 32)
     monkeypatch.setenv("JOURNEYCAPTURE_BROKER_MACHINES", json.dumps({"office-pc": "b" * 32}))

@@ -34,7 +34,15 @@ def main() -> None:
 
     set_dpi_awareness()
 
-    asyncio.run(ws_client.run(config))
+    try:
+        asyncio.run(ws_client.run(config))
+    except ws_client.RegistrationRejected as e:
+        # Not recoverable by retrying — the broker rejected machine_id/api_key
+        # themselves, not a transient network issue. Exit non-zero so this is
+        # distinguishable from a normal shutdown by anything checking the exit code.
+        logger.error("broker rejected this machine's credentials: %s", e)
+        print(f"journeycapture: broker rejected this machine's credentials: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

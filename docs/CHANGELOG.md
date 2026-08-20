@@ -2,6 +2,41 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-20 — Post-migration review fixes
+
+A review pass over the just-completed broker migration (all 4 phases) surfaced three
+real issues, all fixed here:
+
+- **`ConnectionRegistry` reconnect race** (`registry.py`): `register`/`unregister`
+  weren't connection-identity-aware — if a thin client reconnected (new websocket)
+  before the broker noticed the old connection had died (a plausible scenario for a
+  machine on a flaky network/NAT, which is exactly the case the broker exists to
+  handle), the old connection's delayed `unregister` would evict the new, live
+  connection from the registry entirely. Reproduced directly, then fixed:
+  `unregister`/`handle_text_frame`/`handle_binary_frame` now take the `websocket`
+  object and no-op unless it's still the one currently registered for that
+  `machine_id`. New regression test:
+  `test_stale_unregister_does_not_evict_newer_connection`.
+- **Silent exit on rejected handshake** (`ws_client.py`, `server.py`): a broker
+  rejecting a thin client's `machine_id`/`api_key` used to just log an error and
+  return — `journeycapture.exe` would exit with code 0, indistinguishable from a
+  normal shutdown to anything watching the exit code. Now raises a
+  `RegistrationRejected` exception that `main()` catches and turns into a `sys.exit(1)`
+  with a clear stderr message.
+- **Broker's `/docs`/`/redoc`/`/openapi.json` were unauthenticated**: FastAPI's
+  app-level `dependencies=` doesn't cover its own auto-added doc routes, so they
+  bypassed the `X-API-Key` check entirely — verified directly (`200` with no key).
+  Since the broker's HTTP listener defaults to `0.0.0.0` (unlike the MCP server's
+  loopback-only default), this was reachable by default, not just in an unusual
+  deployment. Disabled via `docs_url=None`/`redoc_url=None`/`openapi_url=None`;
+  verified they now 404.
+- Also added minimum-length validation (16 chars, matching the thin client's own
+  `api_key` field) on the broker's own `api_key` and each `machines` entry — previously
+  unvalidated, unlike every other secret in the system.
+- 88 tests passing (was 81) — 7 new regression tests across
+  `test_broker_registry.py`, `test_ws_client.py`, `test_broker_http_api.py`, and
+  `test_broker_config.py`.
+
 ## 2026-08-20 — Windows build/smoke-test docs updated for the broker (phase 4/4)
 
 Final phase of the broker rollout: `docs/WINDOWS_BUILD.md` and

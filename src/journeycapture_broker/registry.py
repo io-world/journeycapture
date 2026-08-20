@@ -52,10 +52,20 @@ class ConnectionRegistry:
         self._connections[machine_id] = _Connection(websocket=websocket)
         logger.info("machine %s connected", machine_id)
 
-    def unregister(self, machine_id: str) -> None:
-        conn = self._connections.pop(machine_id, None)
+    def _current(self, machine_id: str, websocket: ServerConnection) -> _Connection | None:
+        """Look up machine_id's connection, but only if `websocket` is still the one
+        registered — a stale connection (e.g. a slow-to-notice disconnect that races a
+        fast reconnect) must not be allowed to act on a newer connection's state."""
+        conn = self._connections.get(machine_id)
+        if conn is None or conn.websocket is not websocket:
+            return None
+        return conn
+
+    def unregister(self, machine_id: str, websocket: ServerConnection) -> None:
+        conn = self._current(machine_id, websocket)
         if conn is None:
             return
+        del self._connections[machine_id]
         for future in conn.pending.values():
             if not future.done():
                 future.set_exception(MachineNotConnected(f"{machine_id} disconnected mid-request"))
@@ -90,9 +100,9 @@ class ConnectionRegistry:
             conn.pending.pop(request_id, None)
             conn.pending_methods.pop(request_id, None)
 
-    def handle_text_frame(self, machine_id: str, message: dict) -> None:
+    def handle_text_frame(self, machine_id: str, websocket: ServerConnection, message: dict) -> None:
         """Called by ws_server's reader loop for each JSON frame received."""
-        conn = self._connections.get(machine_id)
+        conn = self._current(machine_id, websocket)
         if conn is None:
             return
         request_id = message.get("id")
@@ -112,9 +122,9 @@ class ConnectionRegistry:
             return
         future.set_result((result, None))
 
-    def handle_binary_frame(self, machine_id: str, data: bytes) -> None:
+    def handle_binary_frame(self, machine_id: str, websocket: ServerConnection, data: bytes) -> None:
         """Called by ws_server's reader loop for each binary frame received."""
-        conn = self._connections.get(machine_id)
+        conn = self._current(machine_id, websocket)
         if conn is None or conn.awaiting_binary is None:
             logger.warning("unexpected binary frame from %s (no screenshot awaiting one)", machine_id)
             return

@@ -45,6 +45,15 @@ def test_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_docs_routes_disabled(client: TestClient, path: str) -> None:
+    # These bypass FastAPI's app-level `dependencies` auth check entirely (they're
+    # added outside the dependency-injected router), so they must be disabled rather
+    # than relied on to be auth-gated. See create_app's docs_url=None comment.
+    response = client.get(path)
+    assert response.status_code == 404
+
+
 def test_list_machines(client: TestClient, auth_headers: dict, registry: Mock) -> None:
     registry.connected_machines.return_value = ["office-pc"]
     response = client.get("/machines", headers=auth_headers)

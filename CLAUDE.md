@@ -76,7 +76,11 @@ old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, 
   see below. Each handler runs via `asyncio.to_thread` so a long blocking call (e.g. a
   ~40s `type_text`) doesn't stall the event loop's websocket keepalive pings and get
   the connection dropped. `screenshot` is the one method with a different response
-  shape — see `docs/BROKER.md` on binary frames.
+  shape — see `docs/BROKER.md` on binary frames. A rejected handshake (unknown
+  `machine_id` or wrong `api_key`) raises `RegistrationRejected` instead of being
+  swallowed — auto-reconnect only makes sense for transient network issues, not wrong
+  credentials, so `server.main()` catches it and exits non-zero with a clear stderr
+  message rather than exiting 0 indistinguishably from a normal shutdown.
 - **Auth model now**: each thin client's `api_key` (in its own `config.json`)
   authenticates its websocket handshake to the broker, checked against that
   `machine_id`'s entry in the broker's `machines` config

@@ -33,7 +33,7 @@ async def test_call_resolves_with_matching_response(settings: Settings) -> None:
     async def respond_soon() -> None:
         await asyncio.sleep(0)
         sent = json.loads(websocket.send.call_args.args[0])
-        registry.handle_text_frame("office-pc", {"id": sent["id"], "result": {"status": "ok"}})
+        registry.handle_text_frame("office-pc", websocket, {"id": sent["id"], "result": {"status": "ok"}})
 
     responder = asyncio.create_task(respond_soon())
     result, image = await registry.call("office-pc", "health", {})
@@ -51,7 +51,7 @@ async def test_call_error_response_raises_machine_error(settings: Settings) -> N
     async def respond_soon() -> None:
         await asyncio.sleep(0)
         sent = json.loads(websocket.send.call_args.args[0])
-        registry.handle_text_frame("office-pc", {"id": sent["id"], "error": {"message": "boom"}})
+        registry.handle_text_frame("office-pc", websocket, {"id": sent["id"], "error": {"message": "boom"}})
 
     responder = asyncio.create_task(respond_soon())
     with pytest.raises(MachineError, match="boom"):
@@ -77,8 +77,8 @@ async def test_screenshot_waits_for_binary_frame(settings: Settings) -> None:
     async def respond_soon() -> None:
         await asyncio.sleep(0)
         sent = json.loads(websocket.send.call_args.args[0])
-        registry.handle_text_frame("office-pc", {"id": sent["id"], "result": {"content_type": "image/jpeg"}})
-        registry.handle_binary_frame("office-pc", b"fake-jpeg-bytes")
+        registry.handle_text_frame("office-pc", websocket, {"id": sent["id"], "result": {"content_type": "image/jpeg"}})
+        registry.handle_binary_frame("office-pc", websocket, b"fake-jpeg-bytes")
 
     responder = asyncio.create_task(respond_soon())
     result, image = await registry.call("office-pc", "screenshot", {})
@@ -95,7 +95,7 @@ async def test_disconnect_fails_pending_calls(settings: Settings) -> None:
 
     async def disconnect_soon() -> None:
         await asyncio.sleep(0)
-        registry.unregister("office-pc")
+        registry.unregister("office-pc", websocket)
 
     disconnector = asyncio.create_task(disconnect_soon())
     with pytest.raises(MachineNotConnected):
@@ -106,7 +106,29 @@ async def test_disconnect_fails_pending_calls(settings: Settings) -> None:
 def test_connected_machines(settings: Settings) -> None:
     registry = ConnectionRegistry(settings)
     assert registry.connected_machines() == []
-    registry.register("office-pc", AsyncMock())
+    websocket = AsyncMock()
+    registry.register("office-pc", websocket)
     assert registry.connected_machines() == ["office-pc"]
-    registry.unregister("office-pc")
+    registry.unregister("office-pc", websocket)
+    assert registry.connected_machines() == []
+
+
+def test_stale_unregister_does_not_evict_newer_connection(settings: Settings) -> None:
+    """Regression test: a fast reconnect (B) registering before the old connection's
+    (A) handler notices it's dead must not let A's later unregister/frame-handling
+    evict or act on B's live state. See ConnectionRegistry._current."""
+    registry = ConnectionRegistry(settings)
+    ws_a = AsyncMock()
+    ws_b = AsyncMock()
+
+    registry.register("office-pc", ws_a)
+    registry.register("office-pc", ws_b)  # B reconnects before A's disconnect is noticed
+    assert registry.connected_machines() == ["office-pc"]
+
+    registry.unregister("office-pc", ws_a)  # A's stale handler finally-block fires late
+    assert registry.connected_machines() == ["office-pc"]  # B is still connected
+
+    registry.handle_text_frame("office-pc", ws_a, {"id": "some-stale-id", "result": {}})  # must be a no-op
+
+    registry.unregister("office-pc", ws_b)
     assert registry.connected_machines() == []

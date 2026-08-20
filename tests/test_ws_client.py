@@ -120,3 +120,16 @@ async def test_handle_screenshot_bad_monitor_sends_error(config: Config) -> None
     websocket.send.assert_called_once()
     sent = json.loads(websocket.send.call_args.args[0])
     assert sent == {"id": "5", "error": {"message": "monitor index 9 out of range"}}
+
+
+@pytest.mark.asyncio
+async def test_run_raises_on_rejected_registration(config: Config) -> None:
+    websocket = AsyncMock()
+    websocket.recv.return_value = json.dumps({"ok": False, "error": "unknown machine_id or invalid api_key"})
+
+    async def fake_connect(*args, **kwargs):
+        yield websocket
+
+    with patch("journeycapture_thinclient.ws_client.websockets.connect", fake_connect):
+        with pytest.raises(ws_client.RegistrationRejected, match="invalid api_key"):
+            await ws_client.run(config)
