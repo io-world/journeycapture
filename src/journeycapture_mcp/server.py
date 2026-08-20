@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
     server = MCPServer(
         name="journeycapture",
-        instructions="Remote-control a Windows desktop: move/click/scroll the mouse, type text or send key "
-        "chords, and capture screenshots. Call health_check first if unsure the target machine is reachable.",
+        instructions="Remote-control Windows desktops through a broker that can reach multiple machines. Call "
+        "list_machines first to see what's available, then pass that machine id to every other tool. Call "
+        "health_check if unsure a specific machine is reachable.",
     )
 
     def _prune_old_screenshots(out_dir: Path) -> None:
@@ -49,6 +50,7 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
             logger.warning("failed to save/prune screenshot copies: %s", e)
 
     async def _resolve_xy(
+        machine: str,
         x: int | None,
         y: int | None,
         fx: float | None,
@@ -71,7 +73,7 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
             raise ValueError("Provide either x/y (pixel coordinates) or fx/fy (fraction of the screen, 0.0-1.0).")
         if have_xy:
             return x, y
-        monitors = await client.list_monitors()
+        monitors = await client.list_monitors(machine)
         index = monitor if monitor is not None else (1 if len(monitors) > 1 else 0)
         try:
             target = monitors[index]
@@ -80,25 +82,31 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
         return target["left"] + round(fx * target["width"]), target["top"] + round(fy * target["height"])
 
     @server.tool()
-    async def health_check() -> dict:
-        """Check whether the journeycapture instance is reachable and report its version."""
-        return await client.health()
+    async def list_machines() -> list[str]:
+        """List machine ids currently connected to the broker. Call this first — every other tool needs a machine id from here."""
+        return await client.list_machines()
 
     @server.tool()
-    async def list_monitors() -> list[dict]:
-        """List monitors with pixel bounds in the same coordinate space move_mouse uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1. Always read the actual width/height from here (or from a screenshot's real pixel dimensions) before computing click/move coordinates — never assume a resolution like 1366x768. Guessing wrong is why a click can silently land on empty desktop instead of the intended icon."""
-        logger.info("list_monitors")
-        return await client.list_monitors()
+    async def health_check(machine: str) -> dict:
+        """Check whether the given machine is reachable through the broker and report its version."""
+        return await client.health(machine)
+
+    @server.tool()
+    async def list_monitors(machine: str) -> list[dict]:
+        """List the given machine's monitors with pixel bounds in the same coordinate space move_mouse uses. Index 0 is the bounding box of all monitors combined; physical monitors start at index 1. Always read the actual width/height from here (or from a screenshot's real pixel dimensions) before computing click/move coordinates — never assume a resolution like 1366x768. Guessing wrong is why a click can silently land on empty desktop instead of the intended icon."""
+        logger.info("list_monitors machine=%s", machine)
+        return await client.list_monitors(machine)
 
     @server.tool()
     async def take_screenshot(
+        machine: str,
         format: Literal["png", "jpeg"] | None = None,
         quality: int | None = None,
         monitor: int | None = None,
     ) -> Image:
-        """Capture a screenshot of one monitor. format/quality default to the server's own config when omitted; monitor index comes from list_monitors. Measure coordinates against this image's actual pixel dimensions (or list_monitors) — don't assume a resolution."""
-        logger.info("take_screenshot format=%s quality=%s monitor=%s", format, quality, monitor)
-        data, content_type = await client.screenshot(format=format, quality=quality, monitor=monitor)
+        """Capture a screenshot of one monitor on the given machine. format/quality default to that machine's own config when omitted; monitor index comes from list_monitors. Measure coordinates against this image's actual pixel dimensions (or list_monitors) — don't assume a resolution."""
+        logger.info("take_screenshot machine=%s format=%s quality=%s monitor=%s", machine, format, quality, monitor)
+        data, content_type = await client.screenshot(machine, format=format, quality=quality, monitor=monitor)
         image_format = "png" if "png" in content_type else "jpeg"
         if settings.save_screenshots:
             _save_screenshot(data, image_format)
@@ -106,6 +114,7 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
 
     @server.tool()
     async def move_mouse(
+        machine: str,
         x: int | None = None,
         y: int | None = None,
         fx: float | None = None,
@@ -113,7 +122,7 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
         monitor: int | None = None,
         relative: bool = False,
     ) -> dict:
-        """Move the cursor to an absolute screen position (x/y in pixels, or fx/fy as a fraction 0.0-1.0 of the target monitor's width/height), or by a relative offset (x/y only). (0, 0) is the primary monitor's top-left corner; monitors above/left of it have negative coordinates. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at, unlike guessing a pixel number against an assumed resolution. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1); fx/fy can't be combined with relative=True. Returns the resulting position — check it against what was requested."""
+        """Move the cursor on the given machine to an absolute screen position (x/y in pixels, or fx/fy as a fraction 0.0-1.0 of the target monitor's width/height), or by a relative offset (x/y only). (0, 0) is the primary monitor's top-left corner; monitors above/left of it have negative coordinates. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at, unlike guessing a pixel number against an assumed resolution. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1); fx/fy can't be combined with relative=True. Returns the resulting position — check it against what was requested."""
         if relative:
             if fx is not None or fy is not None:
                 raise ValueError(
@@ -123,15 +132,16 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
                 raise ValueError("x and y are required when relative=True.")
             resolved_x, resolved_y = x, y
         else:
-            resolved_x, resolved_y = await _resolve_xy(x, y, fx, fy, monitor)
+            resolved_x, resolved_y = await _resolve_xy(machine, x, y, fx, fy, monitor)
         logger.info(
-            "move_mouse x=%s y=%s fx=%s fy=%s monitor=%s relative=%s -> resolved (%s, %s)",
-            x, y, fx, fy, monitor, relative, resolved_x, resolved_y,
+            "move_mouse machine=%s x=%s y=%s fx=%s fy=%s monitor=%s relative=%s -> resolved (%s, %s)",
+            machine, x, y, fx, fy, monitor, relative, resolved_x, resolved_y,
         )
-        return await client.move_mouse(resolved_x, resolved_y, relative=relative)
+        return await client.move_mouse(machine, resolved_x, resolved_y, relative=relative)
 
     @server.tool()
     async def click_mouse(
+        machine: str,
         button: Literal["left", "right", "middle"] = "left",
         action: Literal["click", "down", "up"] = "click",
         clicks: int = 1,
@@ -141,32 +151,34 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
         fy: float | None = None,
         monitor: int | None = None,
     ) -> dict:
-        """Click a mouse button, optionally moving to x/y (pixels) or fx/fy (fraction 0.0-1.0 of the target monitor's width/height) first — omit all four to click at the current cursor position. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1). Use action=down/up (instead of the default click) to hold a button across separate calls, e.g. for a drag — an unmatched down auto-releases after ~10s on the server."""
-        resolved_x, resolved_y = await _resolve_xy(x, y, fx, fy, monitor, allow_neither=True)
+        """Click a mouse button on the given machine, optionally moving to x/y (pixels) or fx/fy (fraction 0.0-1.0 of the target monitor's width/height) first — omit all four to click at the current cursor position. Prefer fx/fy over x/y when targeting something visually identified from a screenshot — it's correct regardless of what resolution the image was actually perceived at. monitor selects which monitor fx/fy is relative to (default: the primary physical monitor, same as list_monitors index 1). Use action=down/up (instead of the default click) to hold a button across separate calls, e.g. for a drag — an unmatched down auto-releases after ~10s on the target machine."""
+        resolved_x, resolved_y = await _resolve_xy(machine, x, y, fx, fy, monitor, allow_neither=True)
         logger.info(
-            "click_mouse button=%s action=%s clicks=%d x=%s y=%s fx=%s fy=%s monitor=%s -> resolved x=%s y=%s",
-            button, action, clicks, x, y, fx, fy, monitor, resolved_x, resolved_y,
+            "click_mouse machine=%s button=%s action=%s clicks=%d x=%s y=%s fx=%s fy=%s monitor=%s -> resolved x=%s y=%s",
+            machine, button, action, clicks, x, y, fx, fy, monitor, resolved_x, resolved_y,
         )
-        return await client.click_mouse(button=button, action=action, clicks=clicks, x=resolved_x, y=resolved_y)
+        return await client.click_mouse(
+            machine, button=button, action=action, clicks=clicks, x=resolved_x, y=resolved_y
+        )
 
     @server.tool()
-    async def scroll_mouse(dx: int = 0, dy: int = 0) -> dict:
-        """Scroll the mouse wheel at the current cursor position, in wheel notches (not pixels). Positive dy scrolls up, negative scrolls down; positive dx scrolls right, negative scrolls left."""
-        logger.info("scroll_mouse dx=%d dy=%d", dx, dy)
-        return await client.scroll_mouse(dx=dx, dy=dy)
+    async def scroll_mouse(machine: str, dx: int = 0, dy: int = 0) -> dict:
+        """Scroll the mouse wheel on the given machine at the current cursor position, in wheel notches (not pixels). Positive dy scrolls up, negative scrolls down; positive dx scrolls right, negative scrolls left."""
+        logger.info("scroll_mouse machine=%s dx=%d dy=%d", machine, dx, dy)
+        return await client.scroll_mouse(machine, dx=dx, dy=dy)
 
     @server.tool()
-    async def type_text(text: str) -> dict:
-        """Type printable text into whatever window has focus. For non-printable keys (Enter, Tab, Ctrl+C, etc.) use send_keys instead — this only sends character keystrokes."""
+    async def type_text(machine: str, text: str) -> dict:
+        """Type printable text into whatever window has focus on the given machine. For non-printable keys (Enter, Tab, Ctrl+C, etc.) use send_keys instead — this only sends character keystrokes."""
         # Log the length only, never the text itself — it could be a password or
         # anything else sensitive typed into a remote window.
-        logger.info("type_text %d character(s)", len(text))
-        return await client.type_text(text)
+        logger.info("type_text machine=%s %d character(s)", machine, len(text))
+        return await client.type_text(machine, text)
 
     @server.tool()
-    async def send_keys(keys: list[str], action: Literal["press", "release", "tap"] = "tap") -> dict:
-        """Send one or more named keys, e.g. special keys or chords like ["ctrl", "c"] that type_text can't express. Each key is either a single printable character or a pynput.keyboard.Key name (enter, tab, esc, backspace, space, shift, ctrl, alt, cmd, up, down, left, right, f1-f20, etc). action="tap" (default) presses then releases; "press"/"release" hold or let go without the other half — an unmatched press auto-releases after ~10s on the server."""
-        logger.info("send_keys keys=%s action=%s", keys, action)
-        return await client.send_keys(keys, action=action)
+    async def send_keys(machine: str, keys: list[str], action: Literal["press", "release", "tap"] = "tap") -> dict:
+        """Send one or more named keys to the given machine, e.g. special keys or chords like ["ctrl", "c"] that type_text can't express. Each key is either a single printable character or a pynput.keyboard.Key name (enter, tab, esc, backspace, space, shift, ctrl, alt, cmd, up, down, left, right, f1-f20, etc). action="tap" (default) presses then releases; "press"/"release" hold or let go without the other half — an unmatched press auto-releases after ~10s on the target machine."""
+        logger.info("send_keys machine=%s keys=%s action=%s", machine, keys, action)
+        return await client.send_keys(machine, keys, action=action)
 
     return server

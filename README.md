@@ -1,50 +1,62 @@
 # JourneyCapture
 
-A thin client for Windows that exposes a local REST API to remote-control the mouse
-and keyboard and capture desktop screenshots. Protected by an API-key check and an
-IP allowlist, both configured via `config.json`.
+Remote-controls Windows desktops (mouse, keyboard, screenshots) through three
+components:
 
-## Running from source
+```
+MCP client  --stdio/HTTP-->  MCP server  --HTTP-->  broker  <--WebSocket--  thin client(s)
+```
+
+- **Thin client** (`journeycapture`) — runs on each Windows box, drives the mouse/
+  keyboard/screenshots there. Connects *out* to the broker; doesn't accept inbound
+  connections.
+- **Broker** (`journeycapture-broker`) — routes requests to whichever machine they're
+  addressed to. One broker can relay to many thin clients at once.
+- **MCP server** (`journeycapture-mcp`) — exposes the broker's API as MCP tools for
+  an MCP-aware assistant.
+
+Each runs on its own machine (thin client: the Windows box; broker and MCP server:
+typically the controller machine, though nothing requires that).
+
+## Running the thin client from source
 
 ```
 uv sync
 cp config.example.json config.json
-# edit config.json: set a real api_key and your controller's allowed_ips
+# edit config.json: set broker_host/machine_id/api_key to match the broker's config
 uv run journeycapture
 ```
 
-## Configuration
-
-See `config.example.json`. Config is loaded from (in order): `--config PATH`, the
-`JOURNEYCAPTURE_CONFIG` env var, or `config.json` next to the executable/CWD.
-
-## API
-
-All routes require an `X-API-Key` header and a source IP present in `allowed_ips`.
-
-- `GET /health`
-- `GET /screenshot/monitors`
-- `GET /screenshot?format=&quality=&monitor=`
-- `POST /mouse/move`, `/mouse/click`, `/mouse/scroll`
-- `POST /keyboard/type`, `/keyboard/key`
+Config is loaded from (in order): `--config PATH`, the `JOURNEYCAPTURE_CONFIG` env
+var, or `config.json` next to the executable/CWD.
 
 ## Building the Windows executable
 
 See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) — must be built on Windows.
 Manual verification checklist: [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_TEST.md).
 
-## MCP server
+## Broker
 
-An MCP server exposing this API as tools for MCP-aware assistants — runs on the
-controller machine, separately from `journeycapture.exe`.
+Sits between the MCP server and every thin client.
+
+```
+uv sync --extra broker
+cp config.broker.example.json broker_config.json
+# edit broker_config.json: set api_key and a machine_id/api_key pair per thin client
+uv run journeycapture-broker --config broker_config.json
+```
+
+See [docs/BROKER.md](docs/BROKER.md) for the HTTP API and how routing works.
+
+## MCP server
 
 ```
 uv sync --extra mcp
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
-See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options and wiring it
-into an MCP client.
+See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options, the `machine`
+parameter every tool takes, and wiring it into an MCP client.
 
 ## Dependencies
 

@@ -4,69 +4,99 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Two components in one repo, meant to run on two different machines:
+Three components in one repo, meant to run on (potentially) three different machines:
 
-- **`journeycapture_thinclient`** — a Windows thin client exposing a local REST API
-  (FastAPI/uvicorn) for remote mouse/keyboard control and desktop screenshot capture.
-  The server code is cross-platform Python, but it's only ever *run* as a packaged
-  `.exe` on a real Windows desktop — mouse/keyboard injection (`pynput`) and
-  screenshot capture (`mss`) are Windows-only in practice, and the whole point of the
-  tool is remote-controlling a Windows machine. Protected by an API-key header and a
-  source-IP allowlist, both required in `config.json`.
-- **`journeycapture_mcp`** — an MCP server exposing that REST API as MCP tools. Runs
-  on the *controller* machine (wherever your MCP client is), not on the Windows box.
-  See `docs/MCP_SERVER.md`.
+```
+MCP client  --stdio/HTTP-->  journeycapture_mcp  --HTTP-->  journeycapture_broker  <--WebSocket--  journeycapture_thinclient(s)
+```
+
+- **`journeycapture_thinclient`** — a Windows thin client that drives mouse/keyboard/
+  screenshot capture. Cross-platform Python, but only ever *run* as a packaged `.exe`
+  on a real Windows desktop — `pynput`/`mss` are Windows-only in practice. It does
+  **not** run a server — it connects *out* to the broker over a websocket and stays
+  connected, so it never needs an inbound port open. See "Retired: the thin client's
+  REST API" below for why.
+- **`journeycapture_broker`** — routes requests from the MCP server to whichever
+  thin client they're addressed to (by `machine_id`). One broker can relay to many
+  machines at once — this is what makes "one MCP server, many Windows boxes"
+  possible. See `docs/BROKER.md`.
+- **`journeycapture_mcp`** — an MCP server exposing the broker's HTTP API as MCP
+  tools, one `machine` parameter per tool. Runs on the *controller* machine
+  (wherever your MCP client is). See `docs/MCP_SERVER.md`.
 
 ## Commands
 
 ```
 uv sync                    # install deps for the thin client (creates .venv)
+uv sync --extra broker     # also install deps for the broker (controller-side only)
 uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
 uv run journeycapture      # run the thin client from source (needs config.json - see below)
-uv run journeycapture-mcp --config scripts/config.json  # run the MCP server
+uv run journeycapture-broker --config broker_config.json  # run the broker
+uv run journeycapture-mcp --config scripts/mcp_config.json  # run the MCP server
 uv run pytest -q           # run the full test suite
-uv run pytest tests/test_security.py::test_wrong_key_raises_401  # run a single test
+uv run pytest tests/test_config.py::test_valid_config_parses_with_defaults  # run a single test
 ```
 
-Server config: copy `config.example.json` to `config.json`, set a real `api_key`
-(min 16 chars) and non-empty `allowed_ips`. Config path resolution order: `--config
-PATH` CLI arg → `JOURNEYCAPTURE_CONFIG` env var → `config.json` next to the executable
-(or CWD when run from source). The server refuses to start on a missing/invalid config
-(see `journeycapture_thinclient.config.load_config`).
+Thin client config: copy `config.example.json` to `config.json`, set `broker_host`/
+`machine_id`/`api_key` to match an entry in the broker's own `machines` config.
+Config path resolution order: `--config PATH` CLI arg → `JOURNEYCAPTURE_CONFIG` env
+var → `config.json` next to the executable (or CWD when run from source). Refuses to
+start on a missing/invalid config (see `journeycapture_thinclient.config.load_config`).
+
+Broker config: copy `config.broker.example.json`, set its own `api_key` (what the MCP
+server authenticates with) and a `machines` map of `machine_id: api_key` pairs — see
+`docs/BROKER.md`.
 
 There is no lint/format command configured in this repo.
 
 ## Architecture
 
-- **`journeycapture_thinclient.server`** — entry point (`main()`). Loads config, sets up logging,
-  calls `winutil.set_dpi_awareness()` (Windows-only, no-op elsewhere), builds the
-  FastAPI app, runs it with uvicorn.
-- **`journeycapture_thinclient.api.create_app`** — wires a single `Depends` security gate
-  (`security.make_verify_request`) onto every route in the app, then mounts the
-  routers (`health`, `screenshot`, `mouse`, `keyboard`). There's no per-route auth —
-  it's all-or-nothing at the app level.
-- **`journeycapture_thinclient.security`** — `verify_request` checks source IP against
-  `allowed_ips` *before* checking the API key (403 beats 401 — deliberate, see
-  `test_disallowed_ip_checked_before_key`), using `secrets.compare_digest` for the key
-  comparison. This gate is wired in as a FastAPI-level `Depends`, which does **not**
-  cover `/docs`, `/redoc`, or `/openapi.json` — FastAPI adds those as plain Starlette
-  routes outside the dependency-injection path, so they're reachable without the
-  API key or an allowlisted IP. Left this way deliberately (verified via `TestClient`)
-  so tooling — including an MCP server — can introspect the API shape without
-  credentials; only the ability to *act* is gated. There's also no TLS — traffic
-  (including the API key itself) is plaintext HTTP, an accepted tradeoff as long as
-  the controller and the Windows box share a trusted network; revisit if that stops
-  being true.
-- **`journeycapture_thinclient.routes/*`** — thin FastAPI route handlers; all actual logic lives
-  in `capture.py` (screenshots, via `mss` + Pillow) and `input_control.py`
-  (mouse/keyboard, via `pynput`). Routes are mockable at the
-  `journeycapture_thinclient.routes.<module>.<capture|input_control>.<fn>` path — that's the
-  patching convention `tests/test_api_contract.py` uses throughout.
-- **`journeycapture_thinclient.config.Config`** — pydantic model with `extra="forbid"`, so an
-  unrecognized config key is a hard validation error, not a silent no-op. Same
-  philosophy in `schemas.py`: `MouseClickRequest` has a `model_validator` rejecting a
-  lone `x` or `y` (must be given together, or both omitted) with a 422 — it used to
-  silently ignore a partial pair and click at the current cursor position instead.
+### Retired: the thin client's REST API
+
+Through `2026-08-19`, `journeycapture_thinclient` ran its own FastAPI/uvicorn HTTP
+server (`api.py`, `routes/`, `security.py`), authenticated by an API-key header plus a
+source-IP allowlist. That's gone — replaced by the broker/websocket design described
+above, to prep the architecture for multiple machines and machines that aren't
+directly network-reachable from the controller (NAT/firewalls). If you're reading
+old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, or
+`journeycapture_thinclient.routes`, it's describing the pre-broker design — the
+*behavior* those routes implemented still exists, just reachable through the broker's
+`/machines/{id}/...` HTTP API now, not directly from the thin client. See
+`docs/CHANGELOG.md`'s broker entries for the full reasoning.
+
+- **`journeycapture_thinclient.server`** — entry point (`main()`). Loads config, sets
+  up logging, calls `winutil.set_dpi_awareness()` (Windows-only, no-op elsewhere),
+  then runs `asyncio.run(ws_client.run(config))`.
+- **`journeycapture_thinclient.ws_client`** — connects to the broker via
+  `websockets.connect()`'s built-in auto-reconnect-with-backoff
+  (`async for websocket in connect(...)`), sends a `{"machine_id", "api_key"}`
+  handshake, then loops reading `{"id", "method", "params"}` messages and dispatching
+  them through a small method-name → function table to the same `capture`/
+  `input_control` functions the old routes called — that logic didn't change at all,
+  see below. Each handler runs via `asyncio.to_thread` so a long blocking call (e.g. a
+  ~40s `type_text`) doesn't stall the event loop's websocket keepalive pings and get
+  the connection dropped. `screenshot` is the one method with a different response
+  shape — see `docs/BROKER.md` on binary frames.
+- **Auth model now**: each thin client's `api_key` (in its own `config.json`)
+  authenticates its websocket handshake to the broker, checked against that
+  `machine_id`'s entry in the broker's `machines` config
+  (`journeycapture_broker.ws_server`). Separately, the broker's own `api_key`
+  authenticates the MCP server's HTTP calls to it
+  (`journeycapture_broker.http_api`). No IP allowlist anymore — a websocket
+  connecting *out* doesn't have a client IP to allowlist the way an inbound
+  connection did. No TLS on either leg, same accepted tradeoff as before as long as
+  everything's on a trusted network — revisit if a thin client and the broker end up
+  needing to cross an untrusted one.
+- **`journeycapture_thinclient.capture`/`input_control`** — unchanged by the broker
+  work. All actual mouse/keyboard/screenshot logic lives here; nothing in these two
+  modules knows or cares whether it's being called from an HTTP route (the old
+  design) or a websocket dispatch table (now).
+- **`journeycapture_thinclient.config.Config`** — pydantic model with
+  `extra="forbid"`, so an unrecognized config key is a hard validation error, not a
+  silent no-op. Same philosophy in `schemas.py` (shared with the broker — see below):
+  `MouseClickRequest` has a `model_validator` rejecting a lone `x` or `y` (must be
+  given together, or both omitted) with a validation error — it used to silently
+  ignore a partial pair and click at the current cursor position instead.
 - **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture_thinclient import
   main; main()`), kept as a separate file from `server.py` deliberately for the build.
 
@@ -132,13 +162,13 @@ this. Don't propose UIA-based targeting again without this context.
 
 ### Every command is logged; held input auto-releases
 
-Every mouse/keyboard/screenshot route logs one line (endpoint, source IP, and the
-relevant params) before acting, via each route module's own `logging.getLogger(__name__)`
-— reaches both the console and the rotating log file through the root-logger handlers
-`logging_setup.configure_logging` already sets up, so nothing extra is needed to see it.
-`/keyboard/type` logs the character *count* only, never the text itself, since that
-could be a password or other sensitive content. `/health` is deliberately not logged —
-it's a liveness ping, not a remote-control command.
+Every `ws_client.py` handler (`_handle_mouse_move`, `_handle_keyboard_type`, etc.)
+logs one line before acting, via `logging.getLogger(__name__)` — reaches both the
+console and the rotating log file through the root-logger handlers
+`logging_setup.configure_logging` already sets up, so nothing extra is needed to see
+it. `keyboard_type` logs the character *count* only, never the text itself, since
+that could be a password or other sensitive content. `health` is deliberately not
+logged — it's a liveness ping, not a remote-control command.
 
 `click_mouse`/`send_keys`'s `action="down"`/`"press"` (holding a button/key across
 separate requests, e.g. for a drag) auto-release after `_AUTO_RELEASE_SECONDS` (10s) if
@@ -152,9 +182,10 @@ and never touches this — only an explicit `down`/`press` schedules a timer. Se
 
 Since `pynput`/`mss` behavior and the packaged `.exe` can only be fully verified on
 real Windows hardware, `scripts/` holds standalone httpx-based scripts for live
-testing, run from any machine that can reach the Windows box (never on the box itself):
+testing, run from any machine that can reach the target (never on the thin client
+itself):
 
-- `scripts/live_check.py` — full smoke test: `/health`, wrong-key 401, monitors,
+- `scripts/live_check.py` — full smoke test: health, wrong-key rejection, monitors,
   screenshot, optional `--with-mouse`/`--with-keyboard` round trips.
 - `scripts/get_screenshot.py` — fetch one screenshot, saved as a timestamped file
   under `screenshot_dir` (same config key/default `journeycapture_mcp`'s optional
@@ -163,17 +194,24 @@ testing, run from any machine that can reach the Windows box (never on the box i
 - `scripts/send_text.py` — type a `TEXT` string (edit the constant at the top of the
   file) into whatever window has focus remotely.
 - `scripts/move_mouse.py` — walk the cursor through the primary monitor's corners and
-  center plus one relative move, checking the API's reported position against what
-  was requested at each step.
+  center plus one relative move, checking the reported position against what was
+  requested at each step.
 
-All four read connection defaults (`host`, `port`, `api_key`, etc.) from
-`scripts/config.json`, which is gitignored (contains the real API key) — there's no
-committed example for it, so recreate it locally with the field names each script's
-`--help` documents.
+**Not yet updated for the broker** (tracked, not forgotten): these five scripts still
+build requests like `{host}/mouse/click` directly against the retired thin-client REST
+shape. They need to route through the broker instead
+(`{broker_host}/machines/{machine_id}/mouse/click`) before they'll work again — same
+pattern as `journeycapture_mcp.client`'s update, just applied to each script. Until
+that lands, use `journeycapture_mcp`'s tools directly (or the broker's HTTP API by
+hand) for live verification instead.
 
-Manual-only checks that can't be scripted from macOS (IP-allowlist 403 from a
-disallowed source, DPI-scaling coordinate correctness, UIPI/elevated-window behavior,
-Firewall/AV prompts) are in `docs/WINDOWS_SMOKE_TEST.md`.
+All (once migrated) read connection defaults from `scripts/config.json`, which is
+gitignored (contains real API keys) — there's no committed example for it, so
+recreate it locally with the field names each script's `--help` documents.
+
+Manual-only checks that can't be scripted from macOS (DPI-scaling coordinate
+correctness, UIPI/elevated-window behavior, Firewall/AV prompts) are in
+`docs/WINDOWS_SMOKE_TEST.md`.
 
 ### Building the Windows executable
 
@@ -183,51 +221,93 @@ Must run on real Windows (PyInstaller doesn't cross-compile) — see
 deps, runs the test suite, builds a version-named `dist/journeycapture-<version>.exe`
 via PyInstaller, copies `config.example.json` → `dist/config.json` if missing).
 
+### `journeycapture_broker` — routes MCP requests to the right machine
+
+Lives in `src/journeycapture_broker/`, a third top-level package alongside the other
+two (`[tool.uv.build-backend] module-name` lists all three). Its dependencies
+(`fastapi`, `uvicorn`, `websockets`) sit under a `broker` optional-dependency group —
+controller-side only, same reasoning as the `mcp` group.
+
+- **`config.py`** — `load_settings(config_path=None)`: `api_key` (the MCP-facing
+  secret) and `machines` (a `machine_id: api_key` map — each thin client's own key,
+  checked at websocket handshake time) are required; `host`/`http_port` (default
+  `0.0.0.0:8600`) and `ws_host`/`ws_port` (default `0.0.0.0:8601`) are separate
+  listen addresses for the two different protocols this process serves.
+- **`registry.py`** — `ConnectionRegistry` is the actual routing logic: maps
+  `machine_id` → live websocket connection, and correlates each outgoing
+  `{"id", "method", "params"}` message with the HTTP call `await`-ing a response, by
+  a `uuid4` id, via a pending `asyncio.Future` per in-flight request (with a
+  `request_timeout` — default 15s — so a disconnected/hung machine fails the HTTP
+  call with a clear timeout instead of hanging it forever). Screenshots get special
+  handling: the JSON response (metadata only) doesn't resolve the future by itself —
+  the registry holds it open until the very next frame on that connection, expected
+  to be binary, arrives with the actual image bytes. This depends on connections
+  being processed sequentially on both ends (`ws_client.py` handles one broker
+  request fully — including sending both screenshot frames — before reading the
+  next), which is what makes "the next frame belongs to this response" true without
+  needing to embed a request id inside binary data.
+- **`ws_server.py`** — the `websockets`-based server thin clients connect to.
+  Rejects (closes the connection) a `machine_id` it doesn't know or a key that
+  doesn't match, using `secrets.compare_digest` — same fail-closed, constant-time-
+  comparison philosophy the retired thin-client REST auth used to have.
+- **`http_api.py`** — FastAPI app exposing `/machines` (list connected ids) and
+  `/machines/{id}/...` mirroring the thin client's original route shapes exactly,
+  reusing `journeycapture_thinclient.schemas` directly for request/response models
+  rather than duplicating them (same repo, no reason not to). Translates
+  `ConnectionRegistry`'s `MachineNotConnected`/`MachineTimeout`/`MachineError`
+  exceptions into `404`/`504`/`400` respectively.
+- **`__init__.main()`** — runs the FastAPI/uvicorn HTTP server and the `websockets`
+  server concurrently in one process (`asyncio.gather`) — one broker, two listeners,
+  one shared `ConnectionRegistry`.
+
+Full setup/API/testing details: `docs/BROKER.md`.
+
 ### `journeycapture_mcp` — the MCP server
 
-Lives in `src/journeycapture_mcp/`, a separate top-level package from `journeycapture_thinclient`
-in the same repo/pyproject (`[tool.uv.build-backend] module-name` lists both). Its
-dependencies (`mcp`, `httpx`) sit under the `mcp` optional-dependency group, not the
-base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
-`uv sync` on the Windows box never needs to know the MCP SDK exists.
+Lives in `src/journeycapture_mcp/`. Its dependencies (`mcp`, `httpx`) sit under the
+`mcp` optional-dependency group.
 
 - **`config.py`** — `load_settings(config_path=None)`: with a path (the `--config`
-  CLI flag), reads a JSON file shaped like `scripts/config.json`; without one, falls
-  back to `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY`/`_MCP_HOST`/`_MCP_PORT`/
-  `_MCP_SAVE_SCREENSHOTS`/`_MCP_SCREENSHOT_DIR` env vars. Either way it's the Windows
-  box's address (`host`/`port`/`scheme`/`api_key`) plus where this server itself
-  listens (`mcp_host`/`mcp_port`, default `127.0.0.1:8000` — deliberately separate
-  names from the first pair to avoid confusing "the Windows box" with "this server")
+  CLI flag), reads a JSON file; without one, falls back to
+  `JOURNEYCAPTURE_BROKER_HOST`/`_PORT`/`_SCHEME`/`_API_KEY`/`_MCP_HOST`/`_MCP_PORT`/
+  `_MCP_SAVE_SCREENSHOTS`/`_MCP_SCREENSHOT_DIR`/`_MCP_MAX_SAVED_SCREENSHOTS` env
+  vars. It's the broker's address (`broker_host`/`broker_port`/`broker_scheme`/
+  `broker_api_key` — one broker, potentially many machines behind it) plus where
+  this server itself listens (`mcp_host`/`mcp_port`, default `127.0.0.1:8000` —
+  deliberately separate names to avoid confusing "the broker" with "this server")
   plus the (off-by-default) local screenshot-saving toggle (`save_screenshots`/
   `screenshot_dir`/`max_saved_screenshots`, the last defaulting to 100 — a count-based
   cap, pruned oldest-first after each save, matching how `journeycapture.log`/
   `journeycapture-mcp.log` both rotate rather than growing forever; 0 or negative
-  disables pruning). Fails fast with a clear stderr message if host/api_key are
-  missing either way (mirrors `journeycapture_thinclient.config.load_config`'s
-  fail-fast philosophy).
+  disables pruning). Fails fast with a clear stderr message if broker_host/
+  broker_api_key are missing either way (mirrors
+  `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
-  REST API, one method per endpoint. Raises `JourneyCaptureError` on non-2xx
-  responses, with the response body included (that's where FastAPI's 422 validation
-  details live).
+  broker's HTTP API. Every method takes a `machine` id as its first argument and
+  builds a `/machines/{machine}/...` path. Raises `JourneyCaptureError` on non-2xx
+  responses, with the response body included (that's where the broker's
+  `404`/`504`/`400` detail messages live).
 - **`server.py`** — `build_server(client, settings)` builds an `MCPServer`
   (`mcp.server.mcpserver.MCPServer` — this SDK's current name for what used to be
-  called `FastMCP`) and registers one `@server.tool()` per REST endpoint, with
-  docstrings mirroring the REST API's own OpenAPI descriptions. `take_screenshot`
-  returns `mcp.server.mcpserver.Image` (base64-encoded image content), not raw bytes
-  or a file path — the one endpoint needing translation rather than a passthrough —
-  and, when `settings.save_screenshots` is on, also writes a timestamped copy to
+  called `FastMCP`) and registers one `@server.tool()` per broker endpoint, plus
+  `list_machines` (new — lets an LLM discover what's connected before picking a
+  target). Every tool except `list_machines` takes a required `machine` parameter,
+  passed straight through to `client`. `take_screenshot` returns
+  `mcp.server.mcpserver.Image` (base64-encoded image content), not raw bytes or a
+  file path — the one endpoint needing translation rather than a passthrough — and,
+  when `settings.save_screenshots` is on, also writes a timestamped copy to
   `settings.screenshot_dir` and prunes the oldest files beyond
   `settings.max_saved_screenshots` (a save/prune failure logs a warning rather than
   failing the tool call — it's a debugging convenience, not core functionality).
-  Parameterized by
-  `client`/`settings` (rather than importing module-level singletons) so tests can
-  pass an `AsyncMock`/a throwaway `Settings` and call `server.call_tool(name, args)`
-  directly, in-process, with no real network or HTTP transport involved. Every tool
-  logs its name and arguments before calling `client` (same privacy carve-out as the
-  thin client's own `/keyboard/type` route: `type_text` logs the character count,
-  never the text) — this is what to check if something looks wrong, e.g. whether a
-  double-click actually arrived as one `clicks=2` call or as two separate single
-  clicks too far apart to register as a real double-click on the Windows side.
+  Parameterized by `client`/`settings` (rather than importing module-level
+  singletons) so tests can pass an `AsyncMock`/a throwaway `Settings` and call
+  `server.call_tool(name, args)` directly, in-process, with no real network or HTTP
+  transport involved. Every tool logs its name, machine, and arguments before calling
+  `client` (same privacy carve-out as the thin client: `type_text` logs the character
+  count, never the text) — this is what to check if something looks wrong, e.g.
+  whether a double-click actually arrived as one `clicks=2` call or as two separate
+  single clicks too far apart to register as a real double-click on the target
+  machine.
 - **`logging_setup.py`** — same console + rotating-file-handler pattern as
   `journeycapture_thinclient.logging_setup`, writing to `journeycapture-mcp.log` next
   to wherever the command was run from.
@@ -238,7 +318,7 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
   keeps listening (loopback-only by default) rather than being spawned/owned by the
   MCP client's own lifecycle. This server has no auth of its own at the MCP/HTTP
   layer, so the loopback default is the only thing standing between "just this
-  machine" and "unauthenticated remote control of the Windows box" if
-  `JOURNEYCAPTURE_MCP_HOST` were ever pointed at a non-loopback address.
+  machine" and "unauthenticated remote control of every machine behind the broker"
+  if `JOURNEYCAPTURE_MCP_HOST` were ever pointed at a non-loopback address.
 
 Full setup/config/testing details: `docs/MCP_SERVER.md`.

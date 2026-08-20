@@ -1,13 +1,14 @@
 # MCP server
 
-`journeycapture-mcp` exposes the thin client's REST API (`journeycapture.exe`,
-running on a separate Windows machine) as MCP tools, so an MCP-aware assistant can
-move the mouse, click, scroll, type, send key chords, and capture screenshots on that
-machine.
+`journeycapture-mcp` exposes the broker's HTTP API (`docs/BROKER.md`) as MCP tools, so
+an MCP-aware assistant can move the mouse, click, scroll, type, send key chords, and
+capture screenshots on any Windows machine the broker has a connection to.
 
 It's controller-side only — it runs wherever your MCP client (Claude Code, Claude
-Desktop, etc.) runs, not on the Windows box itself, and talks to `journeycapture.exe`
-over the same HTTP API `scripts/*.py` use for live testing.
+Desktop, etc.) runs. It talks to exactly one broker, but that broker can be relaying
+to many machines — every tool takes a `machine` id, resolved by calling
+`list_machines` first. This replaced a one-server-per-machine model; see
+`docs/CHANGELOG.md` for why.
 
 ## Setup
 
@@ -20,44 +21,43 @@ the MCP SDK isn't a dependency of `journeycapture.exe` or its Windows build.
 
 ## Configuration
 
-Two ways to configure it — a JSON file or environment variables. `journeycapture_mcp/config.py`
-uses the file when `--config` is given, otherwise falls back to the environment variables.
+Two ways to configure it — a JSON file or environment variables.
+`journeycapture_mcp/config.py` uses the file when `--config` is given, otherwise
+falls back to the environment variables.
 
-**File** (`--config PATH`): the same shape as `scripts/config.json`, so you can point
-straight at the one you already have:
+**File** (`--config PATH`):
 
 ```
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
-Recognized keys: `host`, `api_key` (both required), `port` (default `8443`), `scheme`
-(default `"http"`), `timeout`, `mcp_host` (default `"127.0.0.1"`), `mcp_port` (default
-`8000`), `save_screenshots` (default `false`), `screenshot_dir` (default
-`"screenshots"`). Extra keys `scripts/config.json` has for the other scripts
-(`monitor`, `format`, `quality`, `out`) are simply ignored.
+Recognized keys: `broker_host`, `broker_api_key` (both required — `broker_api_key`
+must match the broker's own `api_key`, not any individual machine's), `broker_port`
+(default `8600`), `broker_scheme` (default `"http"`), `timeout`, `mcp_host` (default
+`"127.0.0.1"`), `mcp_port` (default `8000`), `save_screenshots` (default `false`),
+`screenshot_dir` (default `"screenshots"`), `max_saved_screenshots` (default `100`).
 
 **Environment variables** (used only when `--config` isn't given):
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `JOURNEYCAPTURE_HOST` | yes | — | IP or hostname of the Windows box |
-| `JOURNEYCAPTURE_API_KEY` | yes | — | must match `journeycapture.exe`'s `config.json` |
-| `JOURNEYCAPTURE_PORT` | no | `8443` | the Windows box's port |
-| `JOURNEYCAPTURE_SCHEME` | no | `http` | `http` or `https`, for reaching the Windows box |
+| `JOURNEYCAPTURE_BROKER_HOST` | yes | — | IP or hostname of the broker |
+| `JOURNEYCAPTURE_BROKER_API_KEY` | yes | — | must match the broker's own `api_key` |
+| `JOURNEYCAPTURE_BROKER_PORT` | no | `8600` | the broker's HTTP port |
+| `JOURNEYCAPTURE_BROKER_SCHEME` | no | `http` | `http` or `https`, for reaching the broker |
 | `JOURNEYCAPTURE_MCP_HOST` | no | `127.0.0.1` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_PORT` | no | `8000` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS` | no | off | `1`/`true`/`yes` to enable — see below |
 | `JOURNEYCAPTURE_MCP_SCREENSHOT_DIR` | no | `screenshots` | where saved copies go |
+| `JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS` | no | `100` | 0 or negative disables pruning |
 
-Either way, a missing host/api_key fails fast with a clear message on stderr rather
-than starting half-configured.
+Either way, a missing broker_host/broker_api_key fails fast with a clear message on
+stderr rather than starting half-configured.
 
-There's no built-in way to talk to more than one `journeycapture.exe` instance from a
-single server process — each running `journeycapture-mcp` points at exactly one host.
-
-Don't confuse the two host/port pairs: `host`/`port` (or `JOURNEYCAPTURE_HOST`/`_PORT`)
-is where the Windows box is; `mcp_host`/`mcp_port` (or `JOURNEYCAPTURE_MCP_HOST`/`_PORT`)
-is where this server binds for its own MCP clients to connect to.
+Don't confuse the two host/port pairs: `broker_host`/`broker_port` (or
+`JOURNEYCAPTURE_BROKER_HOST`/`_PORT`) is where the broker is; `mcp_host`/`mcp_port`
+(or `JOURNEYCAPTURE_MCP_HOST`/`_PORT`) is where this server binds for its own MCP
+clients to connect to.
 
 ## Running it
 
@@ -65,7 +65,7 @@ This server speaks MCP over **streamable HTTP**, not stdio — you start it your
 separately from your MCP client, and it keeps running until you stop it:
 
 ```
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
 By default it binds `127.0.0.1:8000` — loopback only, so nothing off this machine can
@@ -82,43 +82,44 @@ reach it. Then point your MCP client at it, e.g. a `.mcp.json` entry:
 }
 ```
 
-**Security note:** this server holds the real `journeycapture_thinclient` API key
-internally and has no authentication of its own at the MCP/HTTP layer — anything that
-can reach its bound address can drive the Windows box through it. The loopback-only
+**Security note:** this server holds the broker's real API key internally and has no
+authentication of its own at the MCP/HTTP layer — anything that can reach its bound
+address can drive every machine connected to the broker through it. The loopback-only
 default (`JOURNEYCAPTURE_MCP_HOST=127.0.0.1`) is what keeps this to "processes on this
-machine only." Only change `JOURNEYCAPTURE_MCP_HOST` to a non-loopback address (e.g.
-`0.0.0.0`) if you specifically intend to expose it to other machines, and understand
-that doing so means unauthenticated remote control of the Windows box for anyone who
-can reach that address.
+machine only." Only change it to a non-loopback address if you specifically intend to
+expose it to other machines, and understand what that means for every machine behind
+the broker, not just one.
 
 Since VS Code no longer manages this process's lifecycle, restarting it (e.g. after
 pulling code changes) is on you — stop it (`Ctrl-C` or `kill`) and run it again.
 
 ## Logging
 
-Every tool call is logged (`journeycapture_mcp/server.py`) — tool name and arguments —
-to both the console and a rotating `journeycapture-mcp.log` file next to wherever you
-ran the command (`journeycapture_mcp/logging_setup.py`, same console+file pattern as
-the thin client's own logging). `type_text` logs the character count only, never the
-typed text itself, for the same reason the thin client's own `/keyboard/type` route
-does — it could be a password or other sensitive content.
+Every tool call is logged (`journeycapture_mcp/server.py`) — tool name, machine, and
+arguments — to both the console and a rotating `journeycapture-mcp.log` file next to
+wherever you ran the command (`journeycapture_mcp/logging_setup.py`, same
+console+file pattern as the thin client's own logging). `type_text` logs the
+character count only, never the typed text itself, for the same reason the thin
+client does — it could be a password or other sensitive content.
 
 This is the log to check if something looks wrong — e.g. to tell whether a
 double-click actually arrived as one `click_mouse(clicks=2)` call or as two separate
-single clicks close together (which won't register as a real double-click on the
-Windows side no matter how close together they are, since each is a fully separate
-HTTP round trip).
+single clicks close together (which won't register as a real double-click no matter
+how close together they are, since each is a fully separate round trip).
 
 ## Tools
 
-One tool per REST endpoint (`journeycapture_mcp/server.py`) — `health_check`,
-`list_monitors`, `take_screenshot`, `move_mouse`, `click_mouse`, `scroll_mouse`,
-`type_text`, `send_keys`. Tool descriptions mirror the REST API's own OpenAPI
-descriptions (coordinate origin, scroll units, valid key names), so the same
-reference in `CLAUDE.md`'s architecture section applies here too.
+One tool per REST endpoint the broker exposes (`journeycapture_mcp/server.py`) —
+`list_machines`, `health_check`, `list_monitors`, `take_screenshot`, `move_mouse`,
+`click_mouse`, `scroll_mouse`, `type_text`, `send_keys`. Every tool except
+`list_machines` takes a required `machine` id — call `list_machines` first to see
+what's connected. Tool descriptions mirror the broker's own OpenAPI descriptions
+(coordinate origin, scroll units, valid key names), which in turn mirror the thin
+client's original ones — see `CLAUDE.md`'s architecture section.
 
 `take_screenshot` returns MCP image content (base64-encoded), not a file path or raw
-bytes — nothing is written to disk on the controller side.
+bytes — nothing is written to disk on the controller side unless screenshot-saving
+(below) is enabled.
 
 ### Fractional coordinates (`fx`/`fy`)
 
@@ -150,9 +151,11 @@ every `take_screenshot` result to `screenshot_dir` (default `screenshots/`, crea
 missing, relative to wherever `journeycapture-mcp` was run from) — useful for
 debugging what the model actually saw. Filenames are UTC timestamps down to the
 microsecond (`20260819T235959_123456.jpeg`), so concurrent/rapid screenshots don't
-collide. A save failure (disk full, permissions) logs a warning but doesn't fail the
-underlying `take_screenshot` call — this is a debugging convenience, not core
-functionality. `screenshots/` is gitignored; nothing here is ever committed.
+collide, but they aren't namespaced by machine — if you're saving screenshots from
+more than one machine, they land in the same folder. A save failure (disk full,
+permissions) logs a warning but doesn't fail the underlying `take_screenshot` call —
+this is a debugging convenience, not core functionality. `screenshots/` is
+gitignored; nothing here is ever committed.
 
 Capped at `max_saved_screenshots` (default `100`, config file key or
 `JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS` env var) — after each save, the oldest
@@ -167,8 +170,8 @@ installed — which is the normal state on the Windows build, since
 `scripts/build_windows.ps1` only runs a plain `uv sync`. Run
 `uv sync --extra mcp && uv run pytest -q` to include them.
 
-No live Windows box is needed for these tests — `test_mcp_client.py` mocks the HTTP
-layer with `httpx.MockTransport`, and `test_mcp_server.py` mocks `JourneyCaptureClient`
-itself. For an actual end-to-end check against real hardware, use `health_check` first
-(cheapest, no side effects), then `list_monitors`, the same order
-`scripts/live_check.py` uses for the REST API directly.
+No live broker/machine is needed for these tests — `test_mcp_client.py` mocks the
+HTTP layer with `httpx.MockTransport`, and `test_mcp_server.py` mocks
+`JourneyCaptureClient` itself. For an actual end-to-end check, run a broker and a
+thin client (see `docs/BROKER.md`), then call `list_machines` and `health_check`
+first (cheapest, no side effects) before anything else.

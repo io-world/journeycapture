@@ -13,6 +13,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 from journeycapture_mcp.config import Settings
 from journeycapture_mcp.server import build_server
 
+MACHINE = "office-pc"
+
 
 @pytest.fixture
 def client() -> AsyncMock:
@@ -21,7 +23,7 @@ def client() -> AsyncMock:
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
-    return Settings(host="192.168.1.50", api_key="a" * 32, screenshot_dir=str(tmp_path / "screenshots"))
+    return Settings(broker_host="192.168.1.10", broker_api_key="a" * 32, screenshot_dir=str(tmp_path / "screenshots"))
 
 
 @pytest.fixture
@@ -30,32 +32,40 @@ def server(client: AsyncMock, settings: Settings):
 
 
 @pytest.mark.asyncio
+async def test_list_machines_calls_client(server, client: AsyncMock) -> None:
+    client.list_machines.return_value = ["office-pc", "home-pc"]
+    result = await server.call_tool("list_machines", {})
+    client.list_machines.assert_called_once_with()
+    assert not result.is_error
+
+
+@pytest.mark.asyncio
 async def test_health_check_calls_client(server, client: AsyncMock) -> None:
-    client.health.return_value = {"status": "ok", "version": "0.1.0"}
-    result = await server.call_tool("health_check", {})
-    client.health.assert_called_once_with()
+    client.health.return_value = {"status": "ok", "version": "0.2.0"}
+    result = await server.call_tool("health_check", {"machine": MACHINE})
+    client.health.assert_called_once_with(MACHINE)
     assert not result.is_error
 
 
 @pytest.mark.asyncio
 async def test_move_mouse_passes_through_args(server, client: AsyncMock) -> None:
     client.move_mouse.return_value = {"status": "ok", "x": 5, "y": 6}
-    await server.call_tool("move_mouse", {"x": 5, "y": 6, "relative": True})
-    client.move_mouse.assert_called_once_with(5, 6, relative=True)
+    await server.call_tool("move_mouse", {"machine": MACHINE, "x": 5, "y": 6, "relative": True})
+    client.move_mouse.assert_called_once_with(MACHINE, 5, 6, relative=True)
 
 
 @pytest.mark.asyncio
 async def test_click_mouse_passes_through_args(server, client: AsyncMock) -> None:
     client.click_mouse.return_value = {"status": "ok"}
-    await server.call_tool("click_mouse", {"button": "right", "action": "down"})
-    client.click_mouse.assert_called_once_with(button="right", action="down", clicks=1, x=None, y=None)
+    await server.call_tool("click_mouse", {"machine": MACHINE, "button": "right", "action": "down"})
+    client.click_mouse.assert_called_once_with(MACHINE, button="right", action="down", clicks=1, x=None, y=None)
 
 
 @pytest.mark.asyncio
 async def test_type_text_passes_through_text(server, client: AsyncMock) -> None:
     client.type_text.return_value = {"status": "ok", "length": 5}
-    await server.call_tool("type_text", {"text": "hello"})
-    client.type_text.assert_called_once_with("hello")
+    await server.call_tool("type_text", {"machine": MACHINE, "text": "hello"})
+    client.type_text.assert_called_once_with(MACHINE, "hello")
 
 
 @pytest.mark.asyncio
@@ -63,7 +73,7 @@ async def test_type_text_logs_length_not_text(server, client: AsyncMock, caplog)
     secret = "s3cr3t-password"
     client.type_text.return_value = {"status": "ok", "length": len(secret)}
     with caplog.at_level(logging.INFO, logger="journeycapture_mcp.server"):
-        await server.call_tool("type_text", {"text": secret})
+        await server.call_tool("type_text", {"machine": MACHINE, "text": secret})
     assert secret not in caplog.text
     assert f"{len(secret)} character" in caplog.text
 
@@ -72,7 +82,7 @@ async def test_type_text_logs_length_not_text(server, client: AsyncMock, caplog)
 async def test_click_mouse_logs_call(server, client: AsyncMock, caplog) -> None:
     client.click_mouse.return_value = {"status": "ok"}
     with caplog.at_level(logging.INFO, logger="journeycapture_mcp.server"):
-        await server.call_tool("click_mouse", {"clicks": 2, "x": 100, "y": 200})
+        await server.call_tool("click_mouse", {"machine": MACHINE, "clicks": 2, "x": 100, "y": 200})
     assert "click_mouse" in caplog.text
     assert "clicks=2" in caplog.text
 
@@ -84,8 +94,8 @@ async def test_click_mouse_with_fractional_coordinates(server, client: AsyncMock
         {"index": 1, "left": 0, "top": 0, "width": 1920, "height": 1080},
     ]
     client.click_mouse.return_value = {"status": "ok"}
-    await server.call_tool("click_mouse", {"fx": 0.25, "fy": 0.5})
-    client.click_mouse.assert_called_once_with(button="left", action="click", clicks=1, x=480, y=540)
+    await server.call_tool("click_mouse", {"machine": MACHINE, "fx": 0.25, "fy": 0.5})
+    client.click_mouse.assert_called_once_with(MACHINE, button="left", action="click", clicks=1, x=480, y=540)
 
 
 @pytest.mark.asyncio
@@ -95,8 +105,8 @@ async def test_move_mouse_with_fractional_coordinates(server, client: AsyncMock)
         {"index": 1, "left": 0, "top": 0, "width": 1920, "height": 1080},
     ]
     client.move_mouse.return_value = {"status": "ok", "x": 960, "y": 540}
-    await server.call_tool("move_mouse", {"fx": 0.5, "fy": 0.5})
-    client.move_mouse.assert_called_once_with(960, 540, relative=False)
+    await server.call_tool("move_mouse", {"machine": MACHINE, "fx": 0.5, "fy": 0.5})
+    client.move_mouse.assert_called_once_with(MACHINE, 960, 540, relative=False)
 
 
 @pytest.mark.asyncio
@@ -107,39 +117,39 @@ async def test_fractional_coordinates_use_specified_monitor(server, client: Asyn
         {"index": 2, "left": 1920, "top": 0, "width": 1920, "height": 1080},
     ]
     client.click_mouse.return_value = {"status": "ok"}
-    await server.call_tool("click_mouse", {"fx": 0.5, "fy": 0.5, "monitor": 2})
-    client.click_mouse.assert_called_once_with(button="left", action="click", clicks=1, x=2880, y=540)
+    await server.call_tool("click_mouse", {"machine": MACHINE, "fx": 0.5, "fy": 0.5, "monitor": 2})
+    client.click_mouse.assert_called_once_with(MACHINE, button="left", action="click", clicks=1, x=2880, y=540)
 
 
 @pytest.mark.asyncio
 async def test_click_mouse_both_xy_and_fxfy_raises(server, client: AsyncMock) -> None:
     with pytest.raises(ToolError, match="not both"):
-        await server.call_tool("click_mouse", {"x": 1, "y": 2, "fx": 0.1, "fy": 0.1})
+        await server.call_tool("click_mouse", {"machine": MACHINE, "x": 1, "y": 2, "fx": 0.1, "fy": 0.1})
 
 
 @pytest.mark.asyncio
 async def test_move_mouse_neither_xy_nor_fxfy_raises(server, client: AsyncMock) -> None:
     with pytest.raises(ToolError, match="Provide either"):
-        await server.call_tool("move_mouse", {})
+        await server.call_tool("move_mouse", {"machine": MACHINE})
 
 
 @pytest.mark.asyncio
 async def test_move_mouse_fxfy_with_relative_raises(server, client: AsyncMock) -> None:
     with pytest.raises(ToolError, match="relative"):
-        await server.call_tool("move_mouse", {"fx": 0.1, "fy": 0.1, "relative": True})
+        await server.call_tool("move_mouse", {"machine": MACHINE, "fx": 0.1, "fy": 0.1, "relative": True})
 
 
 @pytest.mark.asyncio
 async def test_send_keys_passes_through_args(server, client: AsyncMock) -> None:
     client.send_keys.return_value = {"status": "ok"}
-    await server.call_tool("send_keys", {"keys": ["ctrl", "c"], "action": "tap"})
-    client.send_keys.assert_called_once_with(["ctrl", "c"], action="tap")
+    await server.call_tool("send_keys", {"machine": MACHINE, "keys": ["ctrl", "c"], "action": "tap"})
+    client.send_keys.assert_called_once_with(MACHINE, ["ctrl", "c"], action="tap")
 
 
 @pytest.mark.asyncio
 async def test_take_screenshot_returns_image_content(server, client: AsyncMock) -> None:
     client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
-    result = await server.call_tool("take_screenshot", {})
+    result = await server.call_tool("take_screenshot", {"machine": MACHINE})
     assert not result.is_error
     assert result.content[0].type == "image"
     assert result.content[0].mime_type == "image/jpeg"
@@ -148,19 +158,22 @@ async def test_take_screenshot_returns_image_content(server, client: AsyncMock) 
 @pytest.mark.asyncio
 async def test_take_screenshot_does_not_save_by_default(server, client: AsyncMock, settings: Settings) -> None:
     client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
-    await server.call_tool("take_screenshot", {})
+    await server.call_tool("take_screenshot", {"machine": MACHINE})
     assert not Path(settings.screenshot_dir).exists()
 
 
 @pytest.mark.asyncio
 async def test_take_screenshot_saves_when_enabled(client: AsyncMock, tmp_path) -> None:
     settings = Settings(
-        host="192.168.1.50", api_key="a" * 32, save_screenshots=True, screenshot_dir=str(tmp_path / "shots")
+        broker_host="192.168.1.10",
+        broker_api_key="a" * 32,
+        save_screenshots=True,
+        screenshot_dir=str(tmp_path / "shots"),
     )
     server = build_server(client, settings)
     client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
 
-    await server.call_tool("take_screenshot", {})
+    await server.call_tool("take_screenshot", {"machine": MACHINE})
 
     saved = list((tmp_path / "shots").glob("*.jpeg"))
     assert len(saved) == 1
@@ -170,8 +183,8 @@ async def test_take_screenshot_saves_when_enabled(client: AsyncMock, tmp_path) -
 @pytest.mark.asyncio
 async def test_take_screenshot_prunes_beyond_cap(client: AsyncMock, tmp_path) -> None:
     settings = Settings(
-        host="192.168.1.50",
-        api_key="a" * 32,
+        broker_host="192.168.1.10",
+        broker_api_key="a" * 32,
         save_screenshots=True,
         screenshot_dir=str(tmp_path / "shots"),
         max_saved_screenshots=3,
@@ -180,7 +193,7 @@ async def test_take_screenshot_prunes_beyond_cap(client: AsyncMock, tmp_path) ->
     client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
 
     for _ in range(5):
-        await server.call_tool("take_screenshot", {})
+        await server.call_tool("take_screenshot", {"machine": MACHINE})
 
     assert len(list((tmp_path / "shots").glob("*.jpeg"))) == 3
 
@@ -188,8 +201,8 @@ async def test_take_screenshot_prunes_beyond_cap(client: AsyncMock, tmp_path) ->
 @pytest.mark.asyncio
 async def test_take_screenshot_no_prune_when_cap_disabled(client: AsyncMock, tmp_path) -> None:
     settings = Settings(
-        host="192.168.1.50",
-        api_key="a" * 32,
+        broker_host="192.168.1.10",
+        broker_api_key="a" * 32,
         save_screenshots=True,
         screenshot_dir=str(tmp_path / "shots"),
         max_saved_screenshots=0,
@@ -198,7 +211,7 @@ async def test_take_screenshot_no_prune_when_cap_disabled(client: AsyncMock, tmp
     client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
 
     for _ in range(5):
-        await server.call_tool("take_screenshot", {})
+        await server.call_tool("take_screenshot", {"machine": MACHINE})
 
     assert len(list((tmp_path / "shots").glob("*.jpeg"))) == 5
 
@@ -206,6 +219,6 @@ async def test_take_screenshot_no_prune_when_cap_disabled(client: AsyncMock, tmp
 @pytest.mark.asyncio
 async def test_list_monitors_calls_client(server, client: AsyncMock) -> None:
     client.list_monitors.return_value = [{"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080}]
-    result = await server.call_tool("list_monitors", {})
-    client.list_monitors.assert_called_once_with()
+    result = await server.call_tool("list_monitors", {"machine": MACHINE})
+    client.list_monitors.assert_called_once_with(MACHINE)
     assert not result.is_error

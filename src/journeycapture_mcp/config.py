@@ -12,13 +12,14 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True)
 class Settings:
-    host: str
-    api_key: str
-    port: int = 8443
-    scheme: str = "http"
+    broker_host: str
+    broker_api_key: str
+    broker_port: int = 8600
+    broker_scheme: str = "http"
     timeout: float = 10.0
     # Where this MCP server itself listens (HTTP transport) — distinct from
-    # host/port above, which are the Windows box's address, not this server's.
+    # broker_host/broker_port above, which are the broker's address, not this
+    # server's.
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8000
     # Off by default: every take_screenshot call also saves a timestamped copy
@@ -44,20 +45,20 @@ def _load_settings_from_file(path: Path) -> Settings:
     except json.JSONDecodeError as e:
         raise ConfigError(f"Config file at {path} is not valid JSON: {e}") from e
 
-    host = data.get("host")
-    if not host:
-        raise ConfigError(f"{path}: 'host' is required (the Windows box's IP or hostname)")
+    broker_host = data.get("broker_host")
+    if not broker_host:
+        raise ConfigError(f"{path}: 'broker_host' is required (the broker's IP or hostname)")
 
-    api_key = data.get("api_key")
-    if not api_key:
-        raise ConfigError(f"{path}: 'api_key' is required (must match journeycapture.exe's config.json)")
+    broker_api_key = data.get("broker_api_key")
+    if not broker_api_key:
+        raise ConfigError(f"{path}: 'broker_api_key' is required (must match the broker's own config)")
 
     try:
         return Settings(
-            host=host,
-            api_key=api_key,
-            port=int(data.get("port", 8443)),
-            scheme=data.get("scheme", "http"),
+            broker_host=broker_host,
+            broker_api_key=broker_api_key,
+            broker_port=int(data.get("broker_port", 8600)),
+            broker_scheme=data.get("broker_scheme", "http"),
             timeout=float(data.get("timeout", 10.0)),
             mcp_host=data.get("mcp_host", "127.0.0.1"),
             mcp_port=int(data.get("mcp_port", 8000)),
@@ -70,25 +71,23 @@ def _load_settings_from_file(path: Path) -> Settings:
 
 
 def _load_settings_from_env() -> Settings:
-    host = os.environ.get("JOURNEYCAPTURE_HOST")
-    if not host:
-        raise ConfigError(
-            "JOURNEYCAPTURE_HOST is required (the Windows box's IP or hostname running journeycapture.exe)"
-        )
+    broker_host = os.environ.get("JOURNEYCAPTURE_BROKER_HOST")
+    if not broker_host:
+        raise ConfigError("JOURNEYCAPTURE_BROKER_HOST is required (the broker's IP or hostname)")
 
-    api_key = os.environ.get("JOURNEYCAPTURE_API_KEY")
-    if not api_key:
-        raise ConfigError("JOURNEYCAPTURE_API_KEY is required (must match journeycapture.exe's config.json)")
+    broker_api_key = os.environ.get("JOURNEYCAPTURE_BROKER_API_KEY")
+    if not broker_api_key:
+        raise ConfigError("JOURNEYCAPTURE_BROKER_API_KEY is required (must match the broker's own config)")
 
-    port_raw = os.environ.get("JOURNEYCAPTURE_PORT", "8443")
+    broker_port_raw = os.environ.get("JOURNEYCAPTURE_BROKER_PORT", "8600")
     try:
-        port = int(port_raw)
+        broker_port = int(broker_port_raw)
     except ValueError as e:
-        raise ConfigError(f"JOURNEYCAPTURE_PORT must be an integer, got {port_raw!r}") from e
+        raise ConfigError(f"JOURNEYCAPTURE_BROKER_PORT must be an integer, got {broker_port_raw!r}") from e
 
-    scheme = os.environ.get("JOURNEYCAPTURE_SCHEME", "http")
-    if scheme not in ("http", "https"):
-        raise ConfigError(f"JOURNEYCAPTURE_SCHEME must be 'http' or 'https', got {scheme!r}")
+    broker_scheme = os.environ.get("JOURNEYCAPTURE_BROKER_SCHEME", "http")
+    if broker_scheme not in ("http", "https"):
+        raise ConfigError(f"JOURNEYCAPTURE_BROKER_SCHEME must be 'http' or 'https', got {broker_scheme!r}")
 
     mcp_host = os.environ.get("JOURNEYCAPTURE_MCP_HOST", "127.0.0.1")
 
@@ -110,10 +109,10 @@ def _load_settings_from_env() -> Settings:
         ) from e
 
     return Settings(
-        host=host,
-        api_key=api_key,
-        port=port,
-        scheme=scheme,
+        broker_host=broker_host,
+        broker_api_key=broker_api_key,
+        broker_port=broker_port,
+        broker_scheme=broker_scheme,
         mcp_host=mcp_host,
         mcp_port=mcp_port,
         save_screenshots=save_screenshots,

@@ -2,6 +2,66 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-20 — journeycapture_mcp routes through the broker (phase 2/4)
+
+Follow-up to the broker/phase 1 entry below: updated `journeycapture_mcp` to talk to
+the broker's `/machines/{id}/...` HTTP API instead of one thin client directly.
+
+- `config.py`: `host`/`port`/`scheme`/`api_key` (one machine) → `broker_host`/
+  `broker_port`/`broker_scheme`/`broker_api_key` (one broker, many machines behind
+  it). Matching env var renames (`JOURNEYCAPTURE_HOST` → `_BROKER_HOST`, etc.).
+- `client.py`: every method takes a `machine` id as its first argument now; new
+  `list_machines()`.
+- `server.py`: every tool except the new `list_machines` takes a required `machine`
+  parameter, no default — there's no longer a single obvious target. This is what
+  actually delivers "one MCP server, many Windows boxes," the goal that started the
+  broker discussion in the first place.
+- Verified live: full pipe (MCP tool call → broker → thin client) exercised locally —
+  `list_machines`, `health_check`, `list_monitors`, `take_screenshot` all round-trip
+  correctly with proper machine routing.
+- 81 tests passing (was 79): `test_mcp_config.py`/`test_mcp_client.py`/
+  `test_mcp_server.py` all updated for the machine-namespaced shape.
+- Docs: `README.md`, `docs/MCP_SERVER.md`, and `CLAUDE.md` rewritten for the new
+  three-component architecture; new `docs/BROKER.md` and `config.broker.example.json`.
+  `scripts/*.py` still target the retired thin-client REST shape directly — not yet
+  migrated to route through the broker (tracked as phase 3).
+
+## 2026-08-20 — Add a broker between MCP and the thin client (phase 1/4)
+
+Prompted by discussing multi-machine scaling: `journeycapture_mcp` talked directly to
+one thin client, so controlling N Windows boxes meant N separate MCP server
+processes, each hardcoded to one machine. Decided to prep the architecture for scale
+via a broker: MCP↔broker over HTTP (mirroring the thin client's REST shape,
+namespaced by machine), broker↔thin-client over WebSocket (the `websockets`
+package) — the thin client now connects *out* to the broker rather than accepting
+inbound connections, so any machine that can reach the broker can be controlled
+regardless of NAT/firewall topology. The thin client's REST API is retired outright,
+not kept alongside the new path — a deliberate, more disruptive choice over a
+transition period.
+
+- New `journeycapture_broker` package: `ConnectionRegistry` correlates broker→machine
+  websocket requests with the HTTP call awaiting them, by request id.
+- Screenshots go over the wire as a JSON metadata frame immediately followed by a
+  **raw binary frame** — no base64 — safe because each connection is processed
+  sequentially on both ends, so a binary frame unambiguously follows the response
+  that preceded it.
+- `journeycapture_thinclient`: removed `api.py`/`routes/`/`security.py`/the uvicorn
+  server; new `ws_client.py` dispatches incoming messages to the same
+  `input_control`/`capture` functions the old routes called — unchanged, so the
+  keystroke pacing, concurrency lock, auto-release, and audit logging from earlier
+  this session all carry over untouched. Each handler runs via `asyncio.to_thread` so
+  a long blocking call doesn't stall the websocket's keepalive pings.
+- `fastapi`/`uvicorn` moved from the thin client's base dependencies to a new
+  `broker` optional-dependency group; `pydantic` promoted to a direct base dependency
+  (previously only transitive via `fastapi`).
+- Verified live: broker + thin client running locally, full pipe exercised through
+  the broker's HTTP API including a real screenshot — proves the binary-frame
+  protocol works, not just unit tests. Can't verify against the actual Windows box
+  until it's rebuilt with this code.
+- 79 tests passing (was 68): `test_api_contract.py`/`test_security.py` removed
+  (tested the retired FastAPI app), new `test_ws_client.py` and `test_broker_*.py`
+  added, `test_config.py` updated for the new config shape.
+
 ## 2026-08-19 — Reject a lone x or y on /mouse/click instead of silently ignoring it
 
 The other item from the earlier "what else should I know about" audit. `/mouse/click`
