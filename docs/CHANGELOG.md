@@ -2,6 +2,25 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Cap and prune saved screenshots
+
+Found during a broader "what else should I know about" audit: `save_screenshots`
+wrote a new file on every `take_screenshot` call with nothing ever removing one,
+unlike `journeycapture.log`/`journeycapture-mcp.log` which both rotate. Left running,
+`screenshot_dir` would grow forever.
+
+- New `Settings.max_saved_screenshots` (default `100`), configurable via
+  `scripts/config.json`-style file key or `JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS`
+  env var. `0` or negative disables pruning (keep everything).
+- After each save, oldest files beyond the cap are deleted (sorted by filename, which
+  is already chronological since it's a UTC timestamp) — a count-based cap, simpler
+  and more predictable than a size- or age-based one given how much screenshot file
+  size varies. A prune failure logs a warning, same as a save failure, and never
+  breaks the underlying `take_screenshot` call.
+- Verified live against the real Windows box: capped at 3, called 5 times, exactly
+  the 3 newest files remained (2 prune events logged as expected).
+- 2 new tests — 65 tests total, up from 63.
+
 ## 2026-08-19 — Unify get_screenshot.py's output with screenshot_dir
 
 `get_screenshot.py`'s `output_file` config key (a single fixed filename, always

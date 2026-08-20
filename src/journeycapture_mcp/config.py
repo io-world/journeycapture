@@ -25,6 +25,9 @@ class Settings:
     # locally, for debugging what the model actually saw.
     save_screenshots: bool = False
     screenshot_dir: str = "screenshots"
+    # Oldest files beyond this count get pruned after each save. 0 or negative
+    # disables pruning (keep everything).
+    max_saved_screenshots: int = 100
 
 
 def load_settings(config_path: str | Path | None = None) -> Settings:
@@ -60,6 +63,7 @@ def _load_settings_from_file(path: Path) -> Settings:
             mcp_port=int(data.get("mcp_port", 8000)),
             save_screenshots=bool(data.get("save_screenshots", False)),
             screenshot_dir=data.get("screenshot_dir", "screenshots"),
+            max_saved_screenshots=int(data.get("max_saved_screenshots", 100)),
         )
     except (TypeError, ValueError) as e:
         raise ConfigError(f"{path}: invalid value: {e}") from e
@@ -97,6 +101,14 @@ def _load_settings_from_env() -> Settings:
     save_screenshots = os.environ.get("JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS", "").lower() in ("1", "true", "yes")
     screenshot_dir = os.environ.get("JOURNEYCAPTURE_MCP_SCREENSHOT_DIR", "screenshots")
 
+    max_saved_raw = os.environ.get("JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS", "100")
+    try:
+        max_saved_screenshots = int(max_saved_raw)
+    except ValueError as e:
+        raise ConfigError(
+            f"JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS must be an integer, got {max_saved_raw!r}"
+        ) from e
+
     return Settings(
         host=host,
         api_key=api_key,
@@ -106,4 +118,5 @@ def _load_settings_from_env() -> Settings:
         mcp_port=mcp_port,
         save_screenshots=save_screenshots,
         screenshot_dir=screenshot_dir,
+        max_saved_screenshots=max_saved_screenshots,
     )

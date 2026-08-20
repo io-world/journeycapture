@@ -196,7 +196,10 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
   listens (`mcp_host`/`mcp_port`, default `127.0.0.1:8000` — deliberately separate
   names from the first pair to avoid confusing "the Windows box" with "this server")
   plus the (off-by-default) local screenshot-saving toggle (`save_screenshots`/
-  `screenshot_dir`). Fails fast with a clear stderr message if host/api_key are
+  `screenshot_dir`/`max_saved_screenshots`, the last defaulting to 100 — a count-based
+  cap, pruned oldest-first after each save, matching how `journeycapture.log`/
+  `journeycapture-mcp.log` both rotate rather than growing forever; 0 or negative
+  disables pruning). Fails fast with a clear stderr message if host/api_key are
   missing either way (mirrors `journeycapture_thinclient.config.load_config`'s
   fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
@@ -210,8 +213,10 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
   returns `mcp.server.mcpserver.Image` (base64-encoded image content), not raw bytes
   or a file path — the one endpoint needing translation rather than a passthrough —
   and, when `settings.save_screenshots` is on, also writes a timestamped copy to
-  `settings.screenshot_dir` (a save failure logs a warning rather than failing the
-  tool call — it's a debugging convenience, not core functionality). Parameterized by
+  `settings.screenshot_dir` and prunes the oldest files beyond
+  `settings.max_saved_screenshots` (a save/prune failure logs a warning rather than
+  failing the tool call — it's a debugging convenience, not core functionality).
+  Parameterized by
   `client`/`settings` (rather than importing module-level singletons) so tests can
   pass an `AsyncMock`/a throwaway `Settings` and call `server.call_tool(name, args)`
   directly, in-process, with no real network or HTTP transport involved. Every tool

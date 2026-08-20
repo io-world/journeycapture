@@ -20,6 +20,19 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
         "chords, and capture screenshots. Call health_check first if unsure the target machine is reachable.",
     )
 
+    def _prune_old_screenshots(out_dir: Path) -> None:
+        if settings.max_saved_screenshots <= 0:
+            return
+        # Filenames are UTC timestamps (%Y%m%dT%H%M%S_%f), so name order is
+        # chronological order — no need to stat each file's mtime.
+        files = sorted(out_dir.iterdir(), key=lambda p: p.name)
+        excess = len(files) - settings.max_saved_screenshots
+        if excess <= 0:
+            return
+        for old_file in files[:excess]:
+            old_file.unlink()
+        logger.info("pruned %d old screenshot(s) from %s (cap: %d)", excess, out_dir, settings.max_saved_screenshots)
+
     def _save_screenshot(data: bytes, image_format: str) -> None:
         try:
             out_dir = Path(settings.screenshot_dir)
@@ -28,11 +41,12 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
             out_path = out_dir / f"{timestamp}.{image_format}"
             out_path.write_bytes(data)
             logger.info("saved screenshot to %s", out_path)
+            _prune_old_screenshots(out_dir)
         except OSError as e:
-            # Saving a debug copy is a convenience, not core functionality — don't
-            # let a failure here (e.g. disk full, permissions) break the actual
-            # take_screenshot call.
-            logger.warning("failed to save screenshot copy: %s", e)
+            # Saving/pruning is a debugging convenience, not core functionality —
+            # don't let a failure here (e.g. disk full, permissions) break the
+            # actual take_screenshot call.
+            logger.warning("failed to save/prune screenshot copies: %s", e)
 
     async def _resolve_xy(
         x: int | None,

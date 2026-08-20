@@ -168,6 +168,42 @@ async def test_take_screenshot_saves_when_enabled(client: AsyncMock, tmp_path) -
 
 
 @pytest.mark.asyncio
+async def test_take_screenshot_prunes_beyond_cap(client: AsyncMock, tmp_path) -> None:
+    settings = Settings(
+        host="192.168.1.50",
+        api_key="a" * 32,
+        save_screenshots=True,
+        screenshot_dir=str(tmp_path / "shots"),
+        max_saved_screenshots=3,
+    )
+    server = build_server(client, settings)
+    client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
+
+    for _ in range(5):
+        await server.call_tool("take_screenshot", {})
+
+    assert len(list((tmp_path / "shots").glob("*.jpeg"))) == 3
+
+
+@pytest.mark.asyncio
+async def test_take_screenshot_no_prune_when_cap_disabled(client: AsyncMock, tmp_path) -> None:
+    settings = Settings(
+        host="192.168.1.50",
+        api_key="a" * 32,
+        save_screenshots=True,
+        screenshot_dir=str(tmp_path / "shots"),
+        max_saved_screenshots=0,
+    )
+    server = build_server(client, settings)
+    client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
+
+    for _ in range(5):
+        await server.call_tool("take_screenshot", {})
+
+    assert len(list((tmp_path / "shots").glob("*.jpeg"))) == 5
+
+
+@pytest.mark.asyncio
 async def test_list_monitors_calls_client(server, client: AsyncMock) -> None:
     client.list_monitors.return_value = [{"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080}]
     result = await server.call_tool("list_monitors", {})

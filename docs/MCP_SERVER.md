@@ -154,6 +154,11 @@ collide. A save failure (disk full, permissions) logs a warning but doesn't fail
 underlying `take_screenshot` call — this is a debugging convenience, not core
 functionality. `screenshots/` is gitignored; nothing here is ever committed.
 
+Capped at `max_saved_screenshots` (default `100`, config file key or
+`JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS` env var) — after each save, the oldest
+files beyond the cap are pruned automatically, so the folder doesn't grow forever.
+Set it to `0` (or negative) to disable pruning and keep everything.
+
 ## Testing
 
 `tests/test_mcp_client.py` and `tests/test_mcp_server.py` require the `mcp` extra;
