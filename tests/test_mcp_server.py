@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,6 +10,7 @@ pytest.importorskip("mcp")  # controller-side-only extra; not installed for the 
 
 from mcp.server.mcpserver.exceptions import ToolError
 
+from journeycapture_mcp.config import Settings
 from journeycapture_mcp.server import build_server
 
 
@@ -18,8 +20,13 @@ def client() -> AsyncMock:
 
 
 @pytest.fixture
-def server(client: AsyncMock):
-    return build_server(client)
+def settings(tmp_path) -> Settings:
+    return Settings(host="192.168.1.50", api_key="a" * 32, screenshot_dir=str(tmp_path / "screenshots"))
+
+
+@pytest.fixture
+def server(client: AsyncMock, settings: Settings):
+    return build_server(client, settings)
 
 
 @pytest.mark.asyncio
@@ -136,6 +143,28 @@ async def test_take_screenshot_returns_image_content(server, client: AsyncMock) 
     assert not result.is_error
     assert result.content[0].type == "image"
     assert result.content[0].mime_type == "image/jpeg"
+
+
+@pytest.mark.asyncio
+async def test_take_screenshot_does_not_save_by_default(server, client: AsyncMock, settings: Settings) -> None:
+    client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
+    await server.call_tool("take_screenshot", {})
+    assert not Path(settings.screenshot_dir).exists()
+
+
+@pytest.mark.asyncio
+async def test_take_screenshot_saves_when_enabled(client: AsyncMock, tmp_path) -> None:
+    settings = Settings(
+        host="192.168.1.50", api_key="a" * 32, save_screenshots=True, screenshot_dir=str(tmp_path / "shots")
+    )
+    server = build_server(client, settings)
+    client.screenshot.return_value = (b"fake-jpeg-bytes", "image/jpeg")
+
+    await server.call_tool("take_screenshot", {})
+
+    saved = list((tmp_path / "shots").glob("*.jpeg"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == b"fake-jpeg-bytes"
 
 
 @pytest.mark.asyncio

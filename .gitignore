@@ -15,4 +15,5 @@ config.json
 *.log
 *.spec
 scripts/click_test_*.jpg
+/screenshots/
 

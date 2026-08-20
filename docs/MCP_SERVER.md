@@ -32,8 +32,9 @@ uv run journeycapture-mcp --config scripts/config.json
 
 Recognized keys: `host`, `api_key` (both required), `port` (default `8443`), `scheme`
 (default `"http"`), `timeout`, `mcp_host` (default `"127.0.0.1"`), `mcp_port` (default
-`8000`). Extra keys `scripts/config.json` has for the other scripts (`monitor`,
-`format`, `quality`, `out`) are simply ignored.
+`8000`), `save_screenshots` (default `false`), `screenshot_dir` (default
+`"screenshots"`). Extra keys `scripts/config.json` has for the other scripts
+(`monitor`, `format`, `quality`, `out`) are simply ignored.
 
 **Environment variables** (used only when `--config` isn't given):
 
@@ -45,6 +46,8 @@ Recognized keys: `host`, `api_key` (both required), `port` (default `8443`), `sc
 | `JOURNEYCAPTURE_SCHEME` | no | `http` | `http` or `https`, for reaching the Windows box |
 | `JOURNEYCAPTURE_MCP_HOST` | no | `127.0.0.1` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_PORT` | no | `8000` | where **this** server itself listens |
+| `JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS` | no | off | `1`/`true`/`yes` to enable — see below |
+| `JOURNEYCAPTURE_MCP_SCREENSHOT_DIR` | no | `screenshots` | where saved copies go |
 
 Either way, a missing host/api_key fails fast with a clear message on stderr rather
 than starting half-configured.
@@ -138,6 +141,18 @@ prompted this.
 `x`/`y` and `fx`/`fy` are mutually exclusive per call (pick one), and `fx`/`fy` can't
 be combined with `move_mouse`'s `relative=True` — a fraction of the screen isn't a
 meaningful concept for a relative offset.
+
+### Saving screenshots locally
+
+Off by default. Set `save_screenshots: true` (config file) or
+`JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS=1` (env var) to also save a timestamped copy of
+every `take_screenshot` result to `screenshot_dir` (default `screenshots/`, created if
+missing, relative to wherever `journeycapture-mcp` was run from) — useful for
+debugging what the model actually saw. Filenames are UTC timestamps down to the
+microsecond (`20260819T235959_123456.jpeg`), so concurrent/rapid screenshots don't
+collide. A save failure (disk full, permissions) logs a warning but doesn't fail the
+underlying `take_screenshot` call — this is a debugging convenience, not core
+functionality. `screenshots/` is gitignored; nothing here is ever committed.
 
 ## Testing
 

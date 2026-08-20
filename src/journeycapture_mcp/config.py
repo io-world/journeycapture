@@ -21,6 +21,10 @@ class Settings:
     # host/port above, which are the Windows box's address, not this server's.
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8000
+    # Off by default: every take_screenshot call also saves a timestamped copy
+    # locally, for debugging what the model actually saw.
+    save_screenshots: bool = False
+    screenshot_dir: str = "screenshots"
 
 
 def load_settings(config_path: str | Path | None = None) -> Settings:
@@ -54,6 +58,8 @@ def _load_settings_from_file(path: Path) -> Settings:
             timeout=float(data.get("timeout", 10.0)),
             mcp_host=data.get("mcp_host", "127.0.0.1"),
             mcp_port=int(data.get("mcp_port", 8000)),
+            save_screenshots=bool(data.get("save_screenshots", False)),
+            screenshot_dir=data.get("screenshot_dir", "screenshots"),
         )
     except (TypeError, ValueError) as e:
         raise ConfigError(f"{path}: invalid value: {e}") from e
@@ -88,6 +94,16 @@ def _load_settings_from_env() -> Settings:
     except ValueError as e:
         raise ConfigError(f"JOURNEYCAPTURE_MCP_PORT must be an integer, got {mcp_port_raw!r}") from e
 
+    save_screenshots = os.environ.get("JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS", "").lower() in ("1", "true", "yes")
+    screenshot_dir = os.environ.get("JOURNEYCAPTURE_MCP_SCREENSHOT_DIR", "screenshots")
+
     return Settings(
-        host=host, api_key=api_key, port=port, scheme=scheme, mcp_host=mcp_host, mcp_port=mcp_port
+        host=host,
+        api_key=api_key,
+        port=port,
+        scheme=scheme,
+        mcp_host=mcp_host,
+        mcp_port=mcp_port,
+        save_screenshots=save_screenshots,
+        screenshot_dir=screenshot_dir,
     )

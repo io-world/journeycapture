@@ -2,6 +2,26 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-19 — Optional local screenshot saving in the MCP server
+
+`take_screenshot` can now also save a timestamped copy locally, for debugging what a
+model actually saw (relevant given the resolution/scaling issues found earlier this
+session). Off by default, enabled for this setup right now.
+
+- New `Settings` fields `save_screenshots` (default `False`) and `screenshot_dir`
+  (default `"screenshots"`), configurable via `scripts/config.json`-style file keys
+  or `JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS`/`JOURNEYCAPTURE_MCP_SCREENSHOT_DIR` env
+  vars.
+- `build_server` now takes `settings` alongside `client` (signature change — the
+  `server` fixture in `tests/test_mcp_server.py` updated to match).
+- Filenames are UTC timestamps to the microsecond, so rapid/concurrent screenshots
+  don't collide. A save failure logs a warning but doesn't fail the underlying
+  `take_screenshot` call — it's a debugging convenience, not core functionality.
+- `screenshots/` is gitignored. Enabled locally via `scripts/config.json`
+  (gitignored itself, not part of this commit) for this session's setup.
+- 2 new tests (default-off, saves-when-enabled) — 63 tests total, up from 61.
+  Verified live against the real Windows box.
+
 ## 2026-08-19 — Add fractional coordinates to the MCP mouse tools
 
 Live use surfaced a second form of the resolution-guessing bug, after the first fix

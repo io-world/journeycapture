@@ -38,5 +38,5 @@ def main() -> None:
     logger.info("Configured for %s:%s (Windows box), listening on %s:%s", settings.host, settings.port, settings.mcp_host, settings.mcp_port)
 
     client = JourneyCaptureClient(settings)
-    server = build_server(client)
+    server = build_server(client, settings)
     server.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)

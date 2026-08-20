@@ -187,31 +187,36 @@ base `dependencies` list, specifically so `scripts/build_windows.ps1`'s plain
 
 - **`config.py`** — `load_settings(config_path=None)`: with a path (the `--config`
   CLI flag), reads a JSON file shaped like `scripts/config.json`; without one, falls
-  back to `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY`/`_MCP_HOST`/`_MCP_PORT`
-  env vars. Either way it's the Windows box's address (`host`/`port`/`scheme`/
-  `api_key`) plus where this server itself listens (`mcp_host`/`mcp_port`, default
-  `127.0.0.1:8000` — deliberately separate names from the first pair to avoid
-  confusing "the Windows box" with "this server"). Fails fast with a clear stderr
-  message if host/api_key are missing either way (mirrors
-  `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
+  back to `JOURNEYCAPTURE_HOST`/`_PORT`/`_SCHEME`/`_API_KEY`/`_MCP_HOST`/`_MCP_PORT`/
+  `_MCP_SAVE_SCREENSHOTS`/`_MCP_SCREENSHOT_DIR` env vars. Either way it's the Windows
+  box's address (`host`/`port`/`scheme`/`api_key`) plus where this server itself
+  listens (`mcp_host`/`mcp_port`, default `127.0.0.1:8000` — deliberately separate
+  names from the first pair to avoid confusing "the Windows box" with "this server")
+  plus the (off-by-default) local screenshot-saving toggle (`save_screenshots`/
+  `screenshot_dir`). Fails fast with a clear stderr message if host/api_key are
+  missing either way (mirrors `journeycapture_thinclient.config.load_config`'s
+  fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
   REST API, one method per endpoint. Raises `JourneyCaptureError` on non-2xx
   responses, with the response body included (that's where FastAPI's 422 validation
   details live).
-- **`server.py`** — `build_server(client)` builds an `MCPServer`
+- **`server.py`** — `build_server(client, settings)` builds an `MCPServer`
   (`mcp.server.mcpserver.MCPServer` — this SDK's current name for what used to be
   called `FastMCP`) and registers one `@server.tool()` per REST endpoint, with
   docstrings mirroring the REST API's own OpenAPI descriptions. `take_screenshot`
   returns `mcp.server.mcpserver.Image` (base64-encoded image content), not raw bytes
-  or a file path — the one endpoint needing translation rather than a passthrough.
-  Parameterized by `client` (rather than importing a module-level singleton) so tests
-  can pass an `AsyncMock` and call `server.call_tool(name, args)` directly, in-process,
-  with no real network or HTTP transport involved. Every tool logs its name and
-  arguments before calling `client` (same privacy carve-out as the thin client's own
-  `/keyboard/type` route: `type_text` logs the character count, never the text) — this
-  is what to check if something looks wrong, e.g. whether a double-click actually
-  arrived as one `clicks=2` call or as two separate single clicks too far apart to
-  register as a real double-click on the Windows side.
+  or a file path — the one endpoint needing translation rather than a passthrough —
+  and, when `settings.save_screenshots` is on, also writes a timestamped copy to
+  `settings.screenshot_dir` (a save failure logs a warning rather than failing the
+  tool call — it's a debugging convenience, not core functionality). Parameterized by
+  `client`/`settings` (rather than importing module-level singletons) so tests can
+  pass an `AsyncMock`/a throwaway `Settings` and call `server.call_tool(name, args)`
+  directly, in-process, with no real network or HTTP transport involved. Every tool
+  logs its name and arguments before calling `client` (same privacy carve-out as the
+  thin client's own `/keyboard/type` route: `type_text` logs the character count,
+  never the text) — this is what to check if something looks wrong, e.g. whether a
+  double-click actually arrived as one `clicks=2` call or as two separate single
+  clicks too far apart to register as a real double-click on the Windows side.
 - **`logging_setup.py`** — same console + rotating-file-handler pattern as
   `journeycapture_thinclient.logging_setup`, writing to `journeycapture-mcp.log` next
   to wherever the command was run from.

@@ -1,21 +1,38 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 from mcp.server.mcpserver import Image, MCPServer
 
 from journeycapture_mcp.client import JourneyCaptureClient
+from journeycapture_mcp.config import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def build_server(client: JourneyCaptureClient) -> MCPServer:
+def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
     server = MCPServer(
         name="journeycapture",
         instructions="Remote-control a Windows desktop: move/click/scroll the mouse, type text or send key "
         "chords, and capture screenshots. Call health_check first if unsure the target machine is reachable.",
     )
+
+    def _save_screenshot(data: bytes, image_format: str) -> None:
+        try:
+            out_dir = Path(settings.screenshot_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+            out_path = out_dir / f"{timestamp}.{image_format}"
+            out_path.write_bytes(data)
+            logger.info("saved screenshot to %s", out_path)
+        except OSError as e:
+            # Saving a debug copy is a convenience, not core functionality — don't
+            # let a failure here (e.g. disk full, permissions) break the actual
+            # take_screenshot call.
+            logger.warning("failed to save screenshot copy: %s", e)
 
     async def _resolve_xy(
         x: int | None,
@@ -69,6 +86,8 @@ def build_server(client: JourneyCaptureClient) -> MCPServer:
         logger.info("take_screenshot format=%s quality=%s monitor=%s", format, quality, monitor)
         data, content_type = await client.screenshot(format=format, quality=quality, monitor=monitor)
         image_format = "png" if "png" in content_type else "jpeg"
+        if settings.save_screenshots:
+            _save_screenshot(data, image_format)
         return Image(data=data, format=image_format)
 
     @server.tool()
