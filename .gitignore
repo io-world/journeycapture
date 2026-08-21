@@ -11,9 +11,14 @@ wheels/
 
 # Runtime files (contain secrets / local state, not for version control)
 config.json
+mcp_config.json
+broker_config.json
 .mcp.json
 *.log
 *.spec
 scripts/click_test_*.jpg
 /screenshots/
+
+# Personal scratch notes, not for version control
+/LocalNotes.md
 

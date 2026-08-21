@@ -73,8 +73,8 @@ Ok "Build complete: $Root\dist\${ExeName}.exe"
 # -- 5. Copy config if missing --------------------------------------------------
 $cfg = "$Root\dist\config.json"
 if (-not (Test-Path $cfg)) {
-    Step "Copying config.example.json -> dist\config.json"
-    Copy-Item "$Root\config.example.json" $cfg
+    Step "Copying examples\config.example.json -> dist\config.json"
+    Copy-Item "$Root\examples\config.example.json" $cfg
     Write-Host "    Edit dist\config.json and set a real api_key and allowed_ips before running." -ForegroundColor Yellow
 } else {
     Ok "dist\config.json already exists - skipping copy."

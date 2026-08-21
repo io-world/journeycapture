@@ -31,7 +31,7 @@ the `mcp` extra: the Windows build doesn't need to know the broker exists.
 JSON file or environment variables, same `load_settings(config_path=None)` pattern as
 the MCP server.
 
-**File** (`--config PATH`), see `config.broker.example.json`:
+**File** (`--config PATH`), see `examples/config.broker.example.json`:
 
 ```json
 {

@@ -37,13 +37,13 @@ uv run pytest -q           # run the full test suite
 uv run pytest tests/test_config.py::test_valid_config_parses_with_defaults  # run a single test
 ```
 
-Thin client config: copy `config.example.json` to `config.json`, set `broker_host`/
+Thin client config: copy `examples/config.example.json` to `config.json`, set `broker_host`/
 `machine_id`/`api_key` to match an entry in the broker's own `machines` config.
 Config path resolution order: `--config PATH` CLI arg → `JOURNEYCAPTURE_CONFIG` env
 var → `config.json` next to the executable (or CWD when run from source). Refuses to
 start on a missing/invalid config (see `journeycapture_thinclient.config.load_config`).
 
-Broker config: copy `config.broker.example.json`, set its own `api_key` (what the MCP
+Broker config: copy `examples/config.broker.example.json`, set its own `api_key` (what the MCP
 server authenticates with) and a `machines` map of `machine_id: api_key` pairs — see
 `docs/BROKER.md`.
 
@@ -221,7 +221,7 @@ Must run on real Windows (PyInstaller doesn't cross-compile) — see
 `docs/WINDOWS_BUILD.md` for the full manual walkthrough, or run
 `scripts/build_windows.ps1` for the one-shot version (installs `uv` if missing, syncs
 deps, runs the test suite, builds a version-named `dist/journeycapture-<version>.exe`
-via PyInstaller, copies `config.example.json` → `dist/config.json` if missing).
+via PyInstaller, copies `examples/config.example.json` → `dist/config.json` if missing).
 
 ### `journeycapture_broker` — routes MCP requests to the right machine
 

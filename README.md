@@ -22,7 +22,7 @@ typically the controller machine, though nothing requires that).
 
 ```
 uv sync
-cp config.example.json config.json
+cp examples/config.example.json config.json
 # edit config.json: set broker_host/machine_id/api_key to match the broker's config
 uv run journeycapture
 ```
@@ -41,7 +41,7 @@ Sits between the MCP server and every thin client.
 
 ```
 uv sync --extra broker
-cp config.broker.example.json broker_config.json
+cp examples/config.broker.example.json broker_config.json
 # edit broker_config.json: set api_key and a machine_id/api_key pair per thin client
 uv run journeycapture-broker --config broker_config.json
 ```
