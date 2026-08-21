@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import ssl
 
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
@@ -11,6 +12,14 @@ from journeycapture_broker.config import Settings
 from journeycapture_broker.registry import ConnectionRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def _build_server_ssl_context(settings: Settings) -> ssl.SSLContext | None:
+    if not (settings.tls_cert_file and settings.tls_key_file):
+        return None
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile=settings.tls_cert_file, keyfile=settings.tls_key_file)
+    return context
 
 
 def _make_handler(settings: Settings, registry: ConnectionRegistry):
@@ -41,6 +50,11 @@ def _make_handler(settings: Settings, registry: ConnectionRegistry):
             return
 
         await websocket.send(json.dumps({"ok": True}))
+        # Always sent, even when empty — a fixed handshake/ack/config sequence is
+        # simpler for any client (this repo's or a third-party agent's, see
+        # docs/THIN_AGENT_PLAYBOOK.md) to implement than a conditional one.
+        profile = settings.machine_profiles.get(machine_id, {})
+        await websocket.send(json.dumps({"type": "config", **profile}))
         registry.register(machine_id, websocket)
         try:
             async for raw in websocket:
@@ -63,6 +77,7 @@ def _make_handler(settings: Settings, registry: ConnectionRegistry):
 
 async def run(settings: Settings, registry: ConnectionRegistry) -> None:
     handler = _make_handler(settings, registry)
-    async with serve(handler, settings.ws_host, settings.ws_port, max_size=None) as server:
+    ssl_context = _build_server_ssl_context(settings)
+    async with serve(handler, settings.ws_host, settings.ws_port, max_size=None, ssl=ssl_context) as server:
         logger.info("websocket server listening on %s:%d", settings.ws_host, settings.ws_port)
         await server.serve_forever()

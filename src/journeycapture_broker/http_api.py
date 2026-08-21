@@ -50,6 +50,14 @@ def create_app(settings: Settings, registry: ConnectionRegistry) -> FastAPI:
         """List machine IDs currently connected to this broker."""
         return registry.connected_machines()
 
+    @app.get("/mcp-config")
+    def mcp_config() -> dict:
+        """Operational config the broker owns for the MCP server (save_screenshots/
+        screenshot_dir/max_saved_screenshots) — fetched once at startup and merged
+        over whatever the MCP server's own local config already has. Empty object
+        if the broker has no mcp_profile configured."""
+        return settings.mcp_profile
+
     @app.get("/machines/{machine_id}/health")
     async def health(machine_id: str) -> dict:
         result, _ = await _call(machine_id, "health", {})

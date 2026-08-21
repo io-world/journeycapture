@@ -58,12 +58,113 @@ the MCP server.
 - `ws_host`/`ws_port` (default `0.0.0.0`/`8601`) — where thin clients connect.
 - `request_timeout` (default `15.0` seconds) — how long an HTTP call waits for a
   machine to respond before failing with a `504`.
+- `tls_cert_file`/`tls_key_file` (optional, must be given together) — paths to a
+  certificate and private key. When both are set, TLS turns on for *both* listeners
+  (HTTP and WS share one cert, since they're the same process/machine identity).
+  Absent (the default): both listeners stay plaintext. See "TLS setup" below.
+- `machine_profiles` (optional, default `{}`) — `machine_id: {...}` pairs, each
+  value an object with `screenshot` and/or `log_level`. Every `machine_id` used
+  here must also be a key in `machines`. Pushed to that thin client right after its
+  websocket handshake succeeds — see "Broker-pushed config" below.
+- `mcp_profile` (optional, default `{}`) — an object with `save_screenshots`/
+  `screenshot_dir`/`max_saved_screenshots`. Fetched by the MCP server once at
+  startup via `GET /mcp-config`. See "Broker-pushed config" below.
 
 **Environment variables**: `JOURNEYCAPTURE_BROKER_API_KEY`,
 `JOURNEYCAPTURE_BROKER_MACHINES` (a JSON object, e.g.
 `'{"office-pc": "...", "home-pc": "..."}'`), `JOURNEYCAPTURE_BROKER_HOST`,
 `JOURNEYCAPTURE_BROKER_WS_HOST`, `JOURNEYCAPTURE_BROKER_HTTP_PORT`,
-`JOURNEYCAPTURE_BROKER_WS_PORT`.
+`JOURNEYCAPTURE_BROKER_WS_PORT`, `JOURNEYCAPTURE_BROKER_REQUEST_TIMEOUT`,
+`JOURNEYCAPTURE_BROKER_TLS_CERT_FILE`, `JOURNEYCAPTURE_BROKER_TLS_KEY_FILE`,
+`JOURNEYCAPTURE_BROKER_MACHINE_PROFILES` (a JSON object keyed by `machine_id`),
+`JOURNEYCAPTURE_BROKER_MCP_PROFILE` (a JSON object).
+
+## TLS setup
+
+Off by default — everything above still works exactly as before if you skip this.
+Turn it on when a thin client or the MCP server needs to cross a network you don't
+fully trust (see `CLAUDE.md`'s "Auth model now" section for the full reasoning).
+
+There's no DNS name anywhere in this system (the broker is always reached by a raw
+LAN IP), so a public CA like Let's Encrypt isn't an option. Instead: generate one
+self-signed certificate for the broker, and give each client (thin client, MCP
+server, or a `scripts/*.py` live-test script) that certificate's fingerprint to pin
+— the client verifies the broker presents *that exact certificate* on every
+connection, the same trust-on-first-use model as an SSH `known_hosts` entry. This is
+purely transport security; the existing `api_key`/`machine_id` auth above is
+unchanged.
+
+```
+openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+  -keyout broker_key.pem -out broker_cert.pem \
+  -subj "/CN=journeycapture-broker" \
+  -addext "subjectAltName=IP:192.168.1.10"
+
+openssl x509 -in broker_cert.pem -noout -fingerprint -sha256
+```
+
+Replace `192.168.1.10` with the broker's real LAN IP. The 10-year validity is
+deliberate — there's no automated renewal here, and trust comes entirely from the
+pinned fingerprint on each client, not from certificate expiry. `broker_cert.pem`/
+`broker_key.pem` should live next to `broker_config.json` (already gitignored — the
+private key must never be committed) rather than in `examples/`.
+
+Set `tls_cert_file`/`tls_key_file` in `broker_config.json` to those two paths and
+restart the broker. Then, on every client: set `broker_tls: true` (thin client) or
+`broker_scheme: "https"` (MCP server / `scripts/*.py --broker-scheme https`), plus
+`broker_cert_fingerprint` set to the fingerprint the second `openssl` command
+printed (colons optional — the fingerprint isn't a secret, safe to paste anywhere).
+
+If the broker's certificate is ever regenerated, every client's
+`broker_cert_fingerprint` needs updating to match — there's no automatic re-trust
+step by design, so a mismatch fails closed (a clear error, not a silent fallback to
+plaintext or an unverified connection) rather than silently trusting a new,
+unverified certificate.
+
+## Broker-pushed config
+
+Off by default (`machine_profiles`/`mcp_profile` both `{}`) — every thin client and
+the MCP server keep behaving exactly as before this existed, purely from their own
+local `config.json`. When you do configure a profile, the broker becomes the single
+place that setting lives, instead of every machine needing its own copy hand-edited
+locally.
+
+**What can move to the broker, and what can't.** Only settings with no bearing on
+*finding or trusting* the broker in the first place are eligible: a thin client's
+`screenshot` (format/quality/monitor) and `log_level`; the MCP server's
+`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`. Everything else stays
+local by necessity, not by choice — `broker_host`/`broker_port`/`broker_tls`/
+`broker_cert_fingerprint` and a thin client's own `machine_id`/`api_key` are needed
+*before* any connection to the broker exists, so there's no channel to push them
+over yet; a thin client's `log_file` and the MCP server's `mcp_host`/`mcp_port` are
+about that process's own machine (where to write a file, what address to bind), not
+something the broker has any business deciding. `timeout` also stays local
+deliberately — how long a given client tolerates the broker being slow is that
+client's own call, not a policy to centralize.
+
+**Thin client**: right after the websocket handshake ack (`{"ok": true}`), the
+broker always sends one more frame — `{"type": "config", ...}` with whatever's in
+`machine_profiles[machine_id]`, `{"type": "config"}` if there's no profile for that
+machine. The thin client applies it on top of its local config.json (a field the
+push doesn't mention keeps whatever the local value already was), on every
+successful (re)connect, not just the first — see
+`journeycapture_windows_thinclient/ws_client.py`'s `_apply_config_push`. See
+`docs/THIN_AGENT_PLAYBOOK.md`'s §1 for the exact wire format, since this is part of
+the protocol contract any new agent needs to implement too, not just this repo's
+own thin client.
+
+**MCP server**: `journeycapture_mcp/__init__.main()` calls `GET /mcp-config` once
+at startup (via `JourneyCaptureClient.get_mcp_config()`) and merges whatever keys
+come back over the matching local `Settings` fields before building the server.
+This fetch failing (broker unreachable, wrong key) logs a warning and falls back to
+local-only settings rather than refusing to start — a broker being briefly down at
+MCP-server-startup time shouldn't take the whole server offline, especially since
+every tool call already handles a down broker the same way, per-call.
+
+**If you ever need to look up which config a given machine is actually running
+with**: it's always the local `config.json` merged with whatever
+`machine_profiles`/`mcp_profile` currently says in the broker's own config — there's
+no third place it could be.
 
 ## Running it
 
@@ -80,6 +181,8 @@ rotating `journeycapture-broker.log`, same pattern as the other two components.
 All routes require `X-API-Key` matching the broker's own `api_key`.
 
 - `GET /machines` — list currently-connected machine ids.
+- `GET /mcp-config` — the broker's `mcp_profile`, fetched by the MCP server once at
+  startup (see "Broker-pushed config" above). `{}` if nothing's configured.
 - `GET /machines/{id}/health`
 - `GET /machines/{id}/screenshot/monitors`
 - `GET /machines/{id}/screenshot?format=&quality=&monitor=`

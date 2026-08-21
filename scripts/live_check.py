@@ -22,6 +22,8 @@ from pathlib import Path
 import httpx
 from PIL import Image
 
+from journeycapture_windows_thinclient.tls_pinning import fetch_pinned_ssl_context
+
 
 @dataclass
 class Results:
@@ -48,6 +50,12 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("JOURNEYCAPTURE_BROKER_API_KEY"),
         help="The broker's own api_key. Defaults to the JOURNEYCAPTURE_BROKER_API_KEY env var",
     )
+    parser.add_argument(
+        "--broker-cert-fingerprint",
+        default=os.environ.get("JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT"),
+        help="SHA-256 fingerprint of the broker's TLS certificate. Required when --broker-scheme https. "
+        "Defaults to the JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT env var",
+    )
     parser.add_argument("--out-dir", default=".", help="Where to save the fetched screenshot")
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument(
@@ -64,6 +72,11 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if not args.api_key:
         parser.error("--api-key is required (or set JOURNEYCAPTURE_BROKER_API_KEY)")
+    if args.broker_scheme == "https" and not args.broker_cert_fingerprint:
+        parser.error(
+            "--broker-cert-fingerprint is required when --broker-scheme https "
+            "(or set JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT)"
+        )
     return args
 
 
@@ -75,7 +88,11 @@ def main() -> int:
 
     print(f"Checking {base_url}\n")
 
-    with httpx.Client(base_url=base_url, timeout=args.timeout) as client:
+    verify: bool | object = True
+    if args.broker_scheme == "https":
+        verify = fetch_pinned_ssl_context(args.broker_host, args.broker_port, args.broker_cert_fingerprint)
+
+    with httpx.Client(base_url=base_url, timeout=args.timeout, verify=verify) as client:
         check_health(client, headers, results)
         check_auth_rejection(client, results)
         monitors = check_monitors(client, headers, results)

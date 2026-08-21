@@ -83,3 +83,38 @@ def test_unknown_field_raises(tmp_path: Path) -> None:
     path = write_config(tmp_path, data)
     with pytest.raises(ConfigError):
         load_config(path)
+
+
+def test_broker_tls_without_fingerprint_raises(tmp_path: Path) -> None:
+    data = valid_data()
+    data["broker_tls"] = True
+    path = write_config(tmp_path, data)
+    with pytest.raises(ConfigError, match="broker_cert_fingerprint is required"):
+        load_config(path)
+
+
+def test_broker_tls_with_malformed_fingerprint_raises(tmp_path: Path) -> None:
+    data = valid_data()
+    data["broker_tls"] = True
+    data["broker_cert_fingerprint"] = "not-a-real-fingerprint"
+    path = write_config(tmp_path, data)
+    with pytest.raises(ConfigError, match="SHA-256 fingerprint"):
+        load_config(path)
+
+
+def test_broker_tls_with_valid_fingerprint_parses(tmp_path: Path) -> None:
+    data = valid_data()
+    data["broker_tls"] = True
+    data["broker_cert_fingerprint"] = ":".join("AB" for _ in range(32))  # 64 hex chars, colon-separated
+    path = write_config(tmp_path, data)
+    config = load_config(path)
+    assert config.broker_tls is True
+    assert config.broker_cert_fingerprint == data["broker_cert_fingerprint"]
+
+
+def test_broker_tls_false_does_not_require_fingerprint(tmp_path: Path) -> None:
+    data = valid_data()
+    path = write_config(tmp_path, data)
+    config = load_config(path)
+    assert config.broker_tls is False
+    assert config.broker_cert_fingerprint is None

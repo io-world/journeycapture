@@ -10,12 +10,20 @@ class ConfigError(Exception):
     pass
 
 
+def _validate_broker_scheme_and_fingerprint(broker_scheme: str, broker_cert_fingerprint: str | None) -> None:
+    if broker_scheme not in ("http", "https"):
+        raise ConfigError(f"broker_scheme must be 'http' or 'https', got {broker_scheme!r}")
+    if broker_scheme == "https" and not broker_cert_fingerprint:
+        raise ConfigError("broker_cert_fingerprint is required when broker_scheme is 'https'")
+
+
 @dataclass(frozen=True)
 class Settings:
     broker_host: str
     broker_api_key: str
     broker_port: int = 8600
     broker_scheme: str = "http"
+    broker_cert_fingerprint: str | None = None
     timeout: float = 10.0
     # Where this MCP server itself listens (HTTP transport) — distinct from
     # broker_host/broker_port above, which are the broker's address, not this
@@ -53,12 +61,20 @@ def _load_settings_from_file(path: Path) -> Settings:
     if not broker_api_key:
         raise ConfigError(f"{path}: 'broker_api_key' is required (must match the broker's own config)")
 
+    broker_scheme = data.get("broker_scheme", "http")
+    broker_cert_fingerprint = data.get("broker_cert_fingerprint")
+    try:
+        _validate_broker_scheme_and_fingerprint(broker_scheme, broker_cert_fingerprint)
+    except ConfigError as e:
+        raise ConfigError(f"{path}: {e}") from e
+
     try:
         return Settings(
             broker_host=broker_host,
             broker_api_key=broker_api_key,
             broker_port=int(data.get("broker_port", 8600)),
-            broker_scheme=data.get("broker_scheme", "http"),
+            broker_scheme=broker_scheme,
+            broker_cert_fingerprint=broker_cert_fingerprint,
             timeout=float(data.get("timeout", 10.0)),
             mcp_host=data.get("mcp_host", "127.0.0.1"),
             mcp_port=int(data.get("mcp_port", 8000)),
@@ -86,8 +102,8 @@ def _load_settings_from_env() -> Settings:
         raise ConfigError(f"JOURNEYCAPTURE_BROKER_PORT must be an integer, got {broker_port_raw!r}") from e
 
     broker_scheme = os.environ.get("JOURNEYCAPTURE_BROKER_SCHEME", "http")
-    if broker_scheme not in ("http", "https"):
-        raise ConfigError(f"JOURNEYCAPTURE_BROKER_SCHEME must be 'http' or 'https', got {broker_scheme!r}")
+    broker_cert_fingerprint = os.environ.get("JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT")
+    _validate_broker_scheme_and_fingerprint(broker_scheme, broker_cert_fingerprint)
 
     mcp_host = os.environ.get("JOURNEYCAPTURE_MCP_HOST", "127.0.0.1")
 
@@ -113,6 +129,7 @@ def _load_settings_from_env() -> Settings:
         broker_api_key=broker_api_key,
         broker_port=broker_port,
         broker_scheme=broker_scheme,
+        broker_cert_fingerprint=broker_cert_fingerprint,
         mcp_host=mcp_host,
         mcp_port=mcp_port,
         save_screenshots=save_screenshots,

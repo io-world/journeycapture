@@ -28,6 +28,8 @@ from pathlib import Path
 
 import httpx
 
+from journeycapture_windows_thinclient.tls_pinning import fetch_pinned_ssl_context
+
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
 
@@ -63,6 +65,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--out", default=None, help="Exact output file path, overrides --dir/timestamp naming")
     parser.add_argument("--timeout", type=float, default=config.get("timeout", 10.0))
+    parser.add_argument(
+        "--broker-cert-fingerprint",
+        default=config.get("broker_cert_fingerprint") or os.environ.get("JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT"),
+        help=f"SHA-256 fingerprint of the broker's TLS certificate. Required when --broker-scheme https. "
+        f"Defaults to {CONFIG_PATH.name}'s broker_cert_fingerprint, then the JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT env var",
+    )
     args = parser.parse_args()
 
     if not args.broker_host:
@@ -72,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     if not args.api_key:
         parser.error(
             f"--api-key is required (or set 'broker_api_key' in {CONFIG_PATH.name}, or JOURNEYCAPTURE_BROKER_API_KEY)"
+        )
+    if args.broker_scheme == "https" and not args.broker_cert_fingerprint:
+        parser.error(
+            f"--broker-cert-fingerprint is required when --broker-scheme https "
+            f"(or set 'broker_cert_fingerprint' in {CONFIG_PATH.name}, or JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT)"
         )
     return args
 
@@ -87,12 +100,17 @@ def main() -> int:
     if args.monitor is not None:
         params["monitor"] = args.monitor
 
+    verify: bool | object = True
+    if args.broker_scheme == "https":
+        verify = fetch_pinned_ssl_context(args.broker_host, args.broker_port, args.broker_cert_fingerprint)
+
     try:
         resp = httpx.get(
             f"{base_url}/screenshot",
             headers={"X-API-Key": args.api_key},
             params=params,
             timeout=args.timeout,
+            verify=verify,
         )
     except httpx.HTTPError as e:
         print(f"request error: {e}", file=sys.stderr)

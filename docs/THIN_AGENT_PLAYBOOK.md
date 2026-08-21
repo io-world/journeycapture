@@ -56,7 +56,25 @@ A `false` ack means your credentials are wrong, not that the network hiccuped �
 don't reconnect-and-retry on this; surface it and stop (see §3's
 `RegistrationRejected` pattern).
 
-**Request/response loop**, once registered: the broker sends text frames shaped
+**Config push**: on a `true` ack, the broker always sends exactly one more text
+frame before anything else, unprompted — this agent's pushed operational config:
+
+```json
+{"type": "config", "screenshot": {"format": "jpeg", "quality": 75, "monitor": 0}, "log_level": "INFO"}
+```
+
+Both fields are optional and independent — a broker with nothing configured for
+this `machine_id` sends `{"type": "config"}` with neither, and a real agent should
+treat "field absent" as "don't change whatever I was already using" (local
+`config.json` value, or this agent's own built-in default), not as "reset to
+nothing." This is what makes a broker with no profile for a given machine
+behave identically to a broker with no config-push feature at all — see
+`docs/BROKER.md`'s "Broker-pushed config" section for the full design and why only
+these two fields are broker-owned (not credentials, not the broker's own address —
+an agent needs those *before* it could ever receive a push). Apply the pushed
+values fresh on every successful (re)connect, not just the first.
+
+**Request/response loop**, once past the config push: the broker sends text frames shaped
 `{"id": "<uuid>", "method": "<name>", "params": {...}}`; the agent must reply on the
 same connection with either:
 
@@ -107,6 +125,21 @@ a clear message; a connection that drops after registering successfully should k
 retrying indefinitely, since the broker/network coming back is the expected case a
 hub architecture exists to tolerate. See `_INITIAL_CONNECT_ATTEMPTS` and
 `BrokerUnreachable` in `ws_client.py` for the reference implementation of this split.
+
+**TLS (optional)**: off by default, on when the broker has `tls_cert_file`/
+`tls_key_file` configured (`docs/BROKER.md`'s "TLS setup"). When it's on, the
+handshake above happens over `wss://` instead of `ws://`, and *before* sending the
+handshake frame, your agent must independently verify the broker's certificate
+against a pinned SHA-256 fingerprint given to it out-of-band (the same way
+`api_key` already is) — trust-on-first-use, like an SSH `known_hosts` entry, not a
+CA chain, since nothing here is ever reached by a DNS name. This is described
+protocol-agnostically because it applies regardless of implementation language: fetch
+the certificate the broker presents, compare its fingerprint to the configured
+value, fail closed (never fall back to an unpinned or plaintext connection) on a
+mismatch, and only then proceed to send credentials. See
+`journeycapture_windows_thinclient/tls_pinning.py` for a reference implementation
+(Python stdlib `ssl`) of exactly this, including why a per-connection verify
+callback isn't the right mechanism.
 
 ## 2. What to reuse vs. what's genuinely OS-specific
 

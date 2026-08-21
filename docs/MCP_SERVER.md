@@ -28,14 +28,16 @@ falls back to the environment variables.
 **File** (`--config PATH`):
 
 ```
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
 Recognized keys: `broker_host`, `broker_api_key` (both required — `broker_api_key`
 must match the broker's own `api_key`, not any individual machine's), `broker_port`
-(default `8600`), `broker_scheme` (default `"http"`), `timeout`, `mcp_host` (default
-`"127.0.0.1"`), `mcp_port` (default `8000`), `save_screenshots` (default `false`),
-`screenshot_dir` (default `"screenshots"`), `max_saved_screenshots` (default `100`).
+(default `8600`), `broker_scheme` (default `"http"`), `broker_cert_fingerprint`
+(required when `broker_scheme` is `"https"` — see `docs/BROKER.md`'s "TLS setup"),
+`timeout`, `mcp_host` (default `"127.0.0.1"`), `mcp_port` (default `8000`),
+`save_screenshots` (default `false`), `screenshot_dir` (default `"screenshots"`),
+`max_saved_screenshots` (default `100`).
 
 **Environment variables** (used only when `--config` isn't given):
 
@@ -45,6 +47,7 @@ must match the broker's own `api_key`, not any individual machine's), `broker_po
 | `JOURNEYCAPTURE_BROKER_API_KEY` | yes | — | must match the broker's own `api_key` |
 | `JOURNEYCAPTURE_BROKER_PORT` | no | `8600` | the broker's HTTP port |
 | `JOURNEYCAPTURE_BROKER_SCHEME` | no | `http` | `http` or `https`, for reaching the broker |
+| `JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT` | if `https` | — | the broker cert's SHA-256 fingerprint, pinned |
 | `JOURNEYCAPTURE_MCP_HOST` | no | `127.0.0.1` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_PORT` | no | `8000` | where **this** server itself listens |
 | `JOURNEYCAPTURE_MCP_SAVE_SCREENSHOTS` | no | off | `1`/`true`/`yes` to enable — see below |
@@ -65,7 +68,7 @@ This server speaks MCP over **streamable HTTP**, not stdio — you start it your
 separately from your MCP client, and it keeps running until you stop it:
 
 ```
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
 By default it binds `127.0.0.1:8000` — loopback only, so nothing off this machine can
@@ -89,6 +92,12 @@ default (`JOURNEYCAPTURE_MCP_HOST=127.0.0.1`) is what keeps this to "processes o
 machine only." Only change it to a non-loopback address if you specifically intend to
 expose it to other machines, and understand what that means for every machine behind
 the broker, not just one.
+
+Setting `broker_scheme: "https"` (with a matching `broker_cert_fingerprint`)
+protects the MCP↔broker leg's traffic in transit — including the `X-API-Key`
+header — when the broker has TLS configured (`docs/BROKER.md`'s "TLS setup"). It
+doesn't change the caveat above: this server's own listener still has no auth of
+its own, TLS or not.
 
 Since VS Code no longer manages this process's lifecycle, restarting it (e.g. after
 pulling code changes) is on you — stop it (`Ctrl-C` or `kill`) and run it again.
@@ -161,6 +170,12 @@ Capped at `max_saved_screenshots` (default `100`, config file key or
 `JOURNEYCAPTURE_MCP_MAX_SAVED_SCREENSHOTS` env var) — after each save, the oldest
 files beyond the cap are pruned automatically, so the folder doesn't grow forever.
 Set it to `0` (or negative) to disable pruning and keep everything.
+
+All three of `save_screenshots`/`screenshot_dir`/`max_saved_screenshots` can also be
+set centrally on the broker (`mcp_profile`) instead of in this server's own local
+config — fetched once at startup and overriding the matching local value for
+whichever keys the broker actually has configured. See `docs/BROKER.md`'s
+"Broker-pushed config" section.
 
 ## Testing
 

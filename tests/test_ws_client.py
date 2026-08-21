@@ -122,6 +122,50 @@ async def test_handle_screenshot_bad_monitor_sends_error(config: Config) -> None
     assert sent == {"id": "5", "error": {"message": "monitor index 9 out of range"}}
 
 
+def test_apply_config_push_updates_screenshot_and_log_level(config: Config) -> None:
+    ws_client._apply_config_push(
+        config, {"screenshot": {"format": "png", "quality": 90, "monitor": 1}, "log_level": "DEBUG"}
+    )
+    assert config.screenshot.format == "png"
+    assert config.screenshot.quality == 90
+    assert config.screenshot.monitor == 1
+    assert config.log_level == "DEBUG"
+
+
+def test_apply_config_push_empty_leaves_config_unchanged(config: Config) -> None:
+    original_screenshot = config.screenshot
+    original_log_level = config.log_level
+    ws_client._apply_config_push(config, {"type": "config"})
+    assert config.screenshot == original_screenshot
+    assert config.log_level == original_log_level
+
+
+@pytest.mark.asyncio
+async def test_run_applies_broker_pushed_config_then_stops(config: Config) -> None:
+    websocket = AsyncMock()
+    websocket.recv.side_effect = [
+        json.dumps({"ok": True}),
+        json.dumps(
+            {"type": "config", "screenshot": {"format": "png", "quality": 90, "monitor": 1}, "log_level": "DEBUG"}
+        ),
+    ]
+
+    async def empty_aiter(self):
+        return
+        yield  # pragma: no cover - makes this an async generator with no items
+
+    websocket.__aiter__ = empty_aiter
+
+    async def fake_connect(*args, **kwargs):
+        yield websocket
+
+    with patch("journeycapture_windows_thinclient.ws_client.websockets.connect", fake_connect):
+        await ws_client.run(config)
+
+    assert config.screenshot.format == "png"
+    assert config.log_level == "DEBUG"
+
+
 @pytest.mark.asyncio
 async def test_run_raises_on_rejected_registration(config: Config) -> None:
     websocket = AsyncMock()

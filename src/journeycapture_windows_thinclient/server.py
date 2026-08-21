@@ -52,6 +52,12 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+    except ws_client.CertificateFingerprintMismatch as e:
+        # Not recoverable by retrying — either broker_cert_fingerprint in config.json
+        # is wrong, or the broker's certificate was regenerated without updating it.
+        logger.error("%s", e)
+        print(f"journeycapture: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

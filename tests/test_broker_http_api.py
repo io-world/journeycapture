@@ -61,6 +61,29 @@ def test_list_machines(client: TestClient, auth_headers: dict, registry: Mock) -
     assert response.json() == ["office-pc"]
 
 
+def test_mcp_config_empty_by_default(client: TestClient, auth_headers: dict) -> None:
+    response = client.get("/mcp-config", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {}
+
+
+def test_mcp_config_returns_configured_profile(registry: Mock, auth_headers: dict) -> None:
+    settings = Settings(
+        api_key=API_KEY,
+        machines={"office-pc": "b" * 32},
+        mcp_profile={"save_screenshots": True, "screenshot_dir": "shots", "max_saved_screenshots": 50},
+    )
+    app = create_app(settings, registry)
+    response = TestClient(app).get("/mcp-config", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"save_screenshots": True, "screenshot_dir": "shots", "max_saved_screenshots": 50}
+
+
+def test_mcp_config_requires_auth(client: TestClient) -> None:
+    response = client.get("/mcp-config")
+    assert response.status_code == 401
+
+
 def test_health(client: TestClient, auth_headers: dict, registry: Mock) -> None:
     registry.call.return_value = ({"status": "ok", "version": "0.2.0"}, None)
     response = client.get("/machines/office-pc/health", headers=auth_headers)

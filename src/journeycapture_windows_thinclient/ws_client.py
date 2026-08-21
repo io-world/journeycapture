@@ -11,8 +11,9 @@ from pydantic import ValidationError
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import process_exception as _default_process_exception
 
-from journeycapture_windows_thinclient import capture, input_control
-from journeycapture_windows_thinclient.config import Config
+from journeycapture_windows_thinclient import capture, input_control, tls_pinning
+from journeycapture_windows_thinclient.config import Config, ScreenshotConfig
+from journeycapture_windows_thinclient.tls_pinning import CertificateFingerprintMismatch  # noqa: F401
 from journeycapture_windows_thinclient.schemas import (
     KeyboardKeyRequest,
     KeyboardTypeRequest,
@@ -45,6 +46,28 @@ class BrokerUnreachable(Exception):
 
 
 _INITIAL_CONNECT_ATTEMPTS = 5
+
+
+def _apply_config_push(config: Config, push: dict) -> None:
+    """Apply operational config the broker pushed right after the handshake ack
+    (see docs/BROKER.md's "Broker-pushed config") on top of this process's local
+    config.json. Only screenshot/log_level are broker-owned — broker_host/port/
+    machine_id/api_key/broker_tls/broker_cert_fingerprint (needed just to reach and
+    trust the broker in the first place) and log_file (a local filesystem path, and
+    switching a live RotatingFileHandler's target mid-process isn't worth the
+    complexity) stay local-only, unaffected by this. A field the broker doesn't
+    mention leaves this process's existing value (local config, or the pydantic
+    default) untouched — this is what makes a broker with no machine_profile for
+    this machine, or an older broker that never sends "type": "config" at all,
+    behave exactly as before this existed.
+    """
+    if "screenshot" in push:
+        config.screenshot = ScreenshotConfig.model_validate(push["screenshot"])
+        logger.info("broker pushed screenshot config: %s", config.screenshot)
+    if "log_level" in push:
+        config.log_level = push["log_level"]
+        logging.getLogger().setLevel(config.log_level)
+        logger.info("broker pushed log_level: %s", config.log_level)
 
 
 def _handle_health(config: Config, params: dict) -> Any:
@@ -152,7 +175,19 @@ async def _dispatch(websocket: ClientConnection, config: Config, message: dict) 
 
 
 async def run(config: Config) -> None:
-    uri = f"ws://{config.broker_host}:{config.broker_port}"
+    ssl_context = None
+    if config.broker_tls:
+        # Blocking (raw-socket) fingerprint verification, done once up front rather
+        # than per-(re)connect — see tls_pinning.fetch_pinned_ssl_context. Run off
+        # the event loop like every other blocking call in this module.
+        ssl_context = await asyncio.to_thread(
+            tls_pinning.fetch_pinned_ssl_context,
+            config.broker_host,
+            config.broker_port,
+            config.broker_cert_fingerprint,
+        )
+    scheme = "wss" if config.broker_tls else "ws"
+    uri = f"{scheme}://{config.broker_host}:{config.broker_port}"
     connected_once = False
     attempts = 0
 
@@ -171,7 +206,9 @@ async def run(config: Config) -> None:
             return BrokerUnreachable(f"could not reach broker at {uri} after {attempts} attempts: {exc}")
         return None
 
-    async for websocket in websockets.connect(uri, max_size=None, process_exception=process_exception):
+    async for websocket in websockets.connect(
+        uri, max_size=None, process_exception=process_exception, ssl=ssl_context
+    ):
         connected_once = True
         try:
             await websocket.send(json.dumps({"machine_id": config.machine_id, "api_key": config.api_key}))
@@ -180,6 +217,12 @@ async def run(config: Config) -> None:
                 raise RegistrationRejected(ack.get("error", "broker rejected registration"))
 
             logger.info("registered with broker %s as machine_id=%s", uri, config.machine_id)
+
+            # The broker always sends exactly one more frame right after the ack —
+            # its pushed operational config for this machine_id, {} if it has none
+            # configured. Applied fresh on every (re)connect, not just the first.
+            config_push = json.loads(await websocket.recv())
+            _apply_config_push(config, config_push)
 
             async for raw in websocket:
                 if isinstance(raw, bytes):

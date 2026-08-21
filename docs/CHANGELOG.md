@@ -2,6 +2,82 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-21 — Broker-pushed config
+
+The broker can now own operational config centrally (`machine_profiles`/
+`mcp_profile` in its own config) instead of every thin client / the MCP server
+needing its own local copy — off by default (`{}`), so nothing changes unless
+configured. Deliberately scoped to only what has no bearing on *finding or
+trusting* the broker: a thin client's `screenshot`/`log_level`, and the MCP
+server's `save_screenshots`/`screenshot_dir`/`max_saved_screenshots`.
+`broker_host`/`port`/`tls`/`cert_fingerprint`/`machine_id`/`api_key` (needed before
+any connection to the broker exists) and purely-local settings (`log_file`,
+`mcp_host`/`mcp_port`, `timeout`) stay local — there's no channel to push the
+former over yet, and no reason to centralize the latter.
+
+- **Wire protocol change**: the broker's websocket handler now always sends one
+  more frame right after the handshake ack — `{"type": "config", ...}`, empty if
+  the machine has no profile — before the normal request/response loop starts.
+  This is a permanent, required part of the handshake sequence now, not optional;
+  `docs/THIN_AGENT_PLAYBOOK.md`'s wire-protocol reference is updated accordingly
+  for any future non-Python agent. The thin client applies it fresh on every
+  successful (re)connect (`ws_client.py`'s `_apply_config_push`), not just the
+  first.
+- New broker HTTP route `GET /mcp-config` returns `mcp_profile`; the MCP server
+  fetches it once at startup and merges it over local `Settings` via
+  `dataclasses.replace()`. Tolerant of the broker being briefly unreachable at that
+  point — logs a warning and falls back to local-only settings rather than
+  refusing to start, since every tool call already handles a down broker the same
+  way, per-call.
+- Broker config validation: every `machine_profiles` key must exist in `machines`;
+  `screenshot` sub-objects are validated by reusing
+  `journeycapture_windows_thinclient.config.ScreenshotConfig` (same cross-package
+  precedent as `schemas.py`); `log_level` is checked against
+  `logging.getLevelNamesMapping()`; both `machine_profiles` entries and
+  `mcp_profile` reject unknown keys.
+- 131 tests passing (was 111) — unit coverage plus a live end-to-end check (real
+  broker + real thin client + real MCP server, minimal local config on both,
+  confirmed the broker's pushed values actually took effect and that a broker
+  being unreachable at MCP startup degrades gracefully instead of crashing).
+
+## 2026-08-21 — Optional TLS on both legs (self-signed cert + pinned fingerprint)
+
+Both network legs (thin client↔broker WebSocket, MCP server↔broker HTTP, and the
+`scripts/*.py` live-test scripts) can now run over TLS instead of plaintext — off by
+default, opt-in per deployment. Since nothing in this system is ever reached by a
+DNS name (always a raw LAN IP), a public CA isn't an option; the trust model is a
+self-signed certificate on the broker plus fingerprint pinning on every client
+(trust-on-first-use, like an SSH `known_hosts` entry), not a private CA or mutual
+TLS — deliberately the lightest-weight design that still fails closed. This is
+purely additive to the existing `api_key`/`machine_id` auth model, not a
+replacement for it.
+
+- New `journeycapture_windows_thinclient.tls_pinning` module: fetches the broker's
+  certificate via a raw probe connection, verifies its SHA-256 fingerprint with a
+  constant-time comparison, then returns an `SSLContext` trusting that exact
+  certificate for all real traffic — chosen over a per-connection verify callback
+  because Python's stdlib `ssl` doesn't expose one, and a callback wouldn't reliably
+  run before `httpx`'s internal connection pool sends credentials on a reconnect.
+- Broker: new `tls_cert_file`/`tls_key_file` config (required together); when set,
+  both the HTTP (uvicorn) and WebSocket (`websockets`) listeners serve TLS.
+- Thin client: new `broker_tls`/`broker_cert_fingerprint` config fields (the
+  fingerprint required when `broker_tls` is true); a mismatch raises
+  `CertificateFingerprintMismatch`, handled the same way as the existing
+  `RegistrationRejected`/`BrokerUnreachable` cases — a clear stderr message and
+  `sys.exit(1)`, never a silent fallback to plaintext.
+- MCP server: new `broker_cert_fingerprint` config field, required when
+  `broker_scheme` is `"https"` (that value already existed but nothing terminated
+  TLS on the broker side until now). Also closed a pre-existing gap where the
+  file-config path never validated `broker_scheme` at all (only the env-var path
+  did).
+- Broker: also closed a pre-existing gap where `_load_settings_from_env` never read
+  `request_timeout` (file-config-only until now).
+- `docs/BROKER.md` gained a "TLS setup" section with the exact `openssl` commands to
+  generate a cert and print its fingerprint. Not automated by design — a broker
+  restart regenerating the cert would silently break every already-pinned client.
+- `docs/THIN_AGENT_PLAYBOOK.md` documents the pinning requirement protocol-agnostically
+  for any future non-Python agent.
+
 ## 2026-08-21 — Renamed journeycapture_thinclient to journeycapture_windows_thinclient
 
 The package is, and always has been, Windows-only in practice (`pynput`/`mss` are

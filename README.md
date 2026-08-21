@@ -48,11 +48,46 @@ uv run journeycapture-broker --config broker_config.json
 
 See [docs/BROKER.md](docs/BROKER.md) for the HTTP API and how routing works.
 
+### TLS (optional)
+
+Off by default — plaintext is fine as long as every leg stays on a trusted network.
+Turn it on when a thin client or the MCP server needs to reach the broker across a
+network you don't fully trust:
+
+```
+openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+  -keyout broker_key.pem -out broker_cert.pem \
+  -subj "/CN=journeycapture-broker" \
+  -addext "subjectAltName=IP:<broker's real LAN IP>"
+openssl x509 -in broker_cert.pem -noout -fingerprint -sha256
+```
+
+Set `tls_cert_file`/`tls_key_file` in `broker_config.json` to those two paths, then
+give every client (thin client's `broker_tls`+`broker_cert_fingerprint`, MCP
+server's `broker_scheme: "https"`+`broker_cert_fingerprint`, or
+`scripts/*.py --broker-scheme https --broker-cert-fingerprint ...`) the fingerprint
+the second command printed. See [docs/BROKER.md](docs/BROKER.md)'s "TLS setup"
+section for the full explanation (why a self-signed cert + pinned fingerprint
+instead of a CA, and what to do if the cert is ever regenerated).
+
+### Broker-pushed config (optional)
+
+The broker can own operational config centrally instead of every thin client / the
+MCP server needing its own local copy — off by default. Add `machine_profiles`
+(per-`machine_id`: `screenshot`/`log_level`) and/or `mcp_profile`
+(`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`) to `broker_config.json`
+and it's pushed to clients automatically (thin clients on every connect, the MCP
+server once at startup) — a field a profile doesn't mention just keeps whatever the
+client's own local config already had. Only settings with no bearing on *finding or
+trusting* the broker are eligible for this — credentials and the broker's own
+address always stay local. See [docs/BROKER.md](docs/BROKER.md)'s "Broker-pushed
+config" section for the full design.
+
 ## MCP server
 
 ```
 uv sync --extra mcp
-uv run journeycapture-mcp --config scripts/config.json
+uv run journeycapture-mcp --config scripts/mcp_config.json
 ```
 
 See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options, the `machine`

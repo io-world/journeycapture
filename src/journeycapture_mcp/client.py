@@ -5,6 +5,7 @@ from typing import Any, Literal
 import httpx
 
 from journeycapture_mcp.config import Settings
+from journeycapture_windows_thinclient.tls_pinning import fetch_pinned_ssl_context
 
 
 class JourneyCaptureError(RuntimeError):
@@ -16,10 +17,20 @@ class JourneyCaptureClient:
     machine_id, routed by the broker to that machine's websocket connection."""
 
     def __init__(self, settings: Settings) -> None:
+        verify: bool | Any = True
+        if settings.broker_scheme == "https":
+            # Blocking (raw-socket) fingerprint verification, done once at startup
+            # rather than per-request — see tls_pinning.fetch_pinned_ssl_context.
+            # __init__ is already synchronous (constructing httpx.AsyncClient itself
+            # is sync; only requests are async), so no event loop to avoid blocking.
+            verify = fetch_pinned_ssl_context(
+                settings.broker_host, settings.broker_port, settings.broker_cert_fingerprint
+            )
         self._client = httpx.AsyncClient(
             base_url=f"{settings.broker_scheme}://{settings.broker_host}:{settings.broker_port}",
             headers={"X-API-Key": settings.broker_api_key},
             timeout=settings.timeout,
+            verify=verify,
         )
 
     async def aclose(self) -> None:
@@ -36,6 +47,24 @@ class JourneyCaptureClient:
 
     async def list_machines(self) -> list[str]:
         resp = await self._request("GET", "/machines")
+        return resp.json()
+
+    async def get_mcp_config(self) -> dict:
+        """Fetch the broker's mcp_profile (save_screenshots/screenshot_dir/
+        max_saved_screenshots) — see docs/BROKER.md's "Broker-pushed config".
+        Tolerates a 404 (an older broker with no /mcp-config route at all) by
+        returning {}, same as an empty mcp_profile — either way, the caller just
+        keeps its own local settings for anything not returned here. A genuine
+        connectivity/auth failure still raises JourneyCaptureError normally.
+        """
+        try:
+            resp = await self._client.request("GET", "/mcp-config")
+        except httpx.HTTPError as e:
+            raise JourneyCaptureError(f"GET /mcp-config failed: {e}") from e
+        if resp.status_code == 404:
+            return {}
+        if resp.status_code >= 400:
+            raise JourneyCaptureError(f"GET /mcp-config -> {resp.status_code}: {resp.text}")
         return resp.json()
 
     async def health(self, machine: str) -> dict:

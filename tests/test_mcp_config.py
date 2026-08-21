@@ -34,6 +34,7 @@ def test_file_overrides_all_fields(tmp_path: Path) -> None:
             "broker_api_key": "b" * 32,
             "broker_port": 9000,
             "broker_scheme": "https",
+            "broker_cert_fingerprint": "aa" * 32,
             "timeout": 5.0,
             "mcp_host": "0.0.0.0",
             "mcp_port": 9001,
@@ -42,6 +43,7 @@ def test_file_overrides_all_fields(tmp_path: Path) -> None:
     settings = load_settings(path)
     assert settings.broker_port == 9000
     assert settings.broker_scheme == "https"
+    assert settings.broker_cert_fingerprint == "aa" * 32
     assert settings.timeout == 5.0
     assert settings.mcp_host == "0.0.0.0"
     assert settings.mcp_port == 9001
@@ -83,3 +85,38 @@ def test_missing_broker_host_env_var_raises(monkeypatch) -> None:
     monkeypatch.delenv("JOURNEYCAPTURE_BROKER_API_KEY", raising=False)
     with pytest.raises(ConfigError, match="JOURNEYCAPTURE_BROKER_HOST"):
         load_settings()
+
+
+def test_https_without_fingerprint_raises_file(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path, {"broker_host": "192.168.1.50", "broker_api_key": "a" * 32, "broker_scheme": "https"}
+    )
+    with pytest.raises(ConfigError, match="broker_cert_fingerprint is required"):
+        load_settings(path)
+
+
+def test_https_without_fingerprint_raises_env(monkeypatch) -> None:
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_HOST", "192.168.1.50")
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_API_KEY", "a" * 32)
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_SCHEME", "https")
+    monkeypatch.delenv("JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT", raising=False)
+    with pytest.raises(ConfigError, match="broker_cert_fingerprint is required"):
+        load_settings()
+
+
+def test_https_with_fingerprint_loads_env(monkeypatch) -> None:
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_HOST", "192.168.1.50")
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_API_KEY", "a" * 32)
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_SCHEME", "https")
+    monkeypatch.setenv("JOURNEYCAPTURE_BROKER_CERT_FINGERPRINT", "aa" * 32)
+    settings = load_settings()
+    assert settings.broker_scheme == "https"
+    assert settings.broker_cert_fingerprint == "aa" * 32
+
+
+def test_invalid_broker_scheme_raises_file(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path, {"broker_host": "192.168.1.50", "broker_api_key": "a" * 32, "broker_scheme": "ftp"}
+    )
+    with pytest.raises(ConfigError, match="broker_scheme must be"):
+        load_settings(path)

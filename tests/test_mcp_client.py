@@ -95,6 +95,36 @@ async def test_error_response_raises_journeycapture_error(settings: Settings) ->
 
 
 @pytest.mark.asyncio
+async def test_get_mcp_config_returns_profile(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"save_screenshots": True, "max_saved_screenshots": 50})
+
+    client = make_client(settings, handler)
+    result = await client.get_mcp_config()
+    assert result == {"save_screenshots": True, "max_saved_screenshots": 50}
+
+
+@pytest.mark.asyncio
+async def test_get_mcp_config_tolerates_404(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    client = make_client(settings, handler)
+    result = await client.get_mcp_config()
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_get_mcp_config_raises_on_other_errors(settings: Settings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="internal error")
+
+    client = make_client(settings, handler)
+    with pytest.raises(JourneyCaptureError, match="500"):
+        await client.get_mcp_config()
+
+
+@pytest.mark.asyncio
 async def test_click_mouse_omits_unset_coordinates(settings: Settings) -> None:
     seen = {}
 

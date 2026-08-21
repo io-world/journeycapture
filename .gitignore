@@ -17,6 +17,8 @@ thinclient_config.json
 .mcp.json
 *.log
 *.spec
+broker_cert.pem
+broker_key.pem
 scripts/click_test_*.jpg
 /screenshots/
 

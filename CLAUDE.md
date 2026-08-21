@@ -19,7 +19,9 @@ MCP client  --stdio/HTTP-->  journeycapture_mcp  --HTTP-->  journeycapture_broke
 - **`journeycapture_broker`** — routes requests from the MCP server to whichever
   thin client they're addressed to (by `machine_id`). One broker can relay to many
   machines at once — this is what makes "one MCP server, many Windows boxes"
-  possible. See `docs/BROKER.md`.
+  possible. It's also the single place operational config for every thin client
+  and the MCP server can live, instead of each needing its own local copy — see
+  "Broker-pushed config" below and `docs/BROKER.md`.
 - **`journeycapture_mcp`** — an MCP server exposing the broker's HTTP API as MCP
   tools, one `machine` parameter per tool. Runs on the *controller* machine
   (wherever your MCP client is). See `docs/MCP_SERVER.md`.
@@ -32,7 +34,7 @@ uv sync --extra broker     # also install deps for the broker (controller-side o
 uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
 uv run journeycapture      # run the thin client from source (needs config.json - see below)
 uv run journeycapture-broker --config broker_config.json  # run the broker
-uv run journeycapture-mcp --config scripts/config.json  # run the MCP server
+uv run journeycapture-mcp --config scripts/mcp_config.json  # run the MCP server
 uv run pytest -q           # run the full test suite
 uv run pytest tests/test_config.py::test_valid_config_parses_with_defaults  # run a single test
 ```
@@ -88,9 +90,19 @@ old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, 
   authenticates the MCP server's HTTP calls to it
   (`journeycapture_broker.http_api`). No IP allowlist anymore — a websocket
   connecting *out* doesn't have a client IP to allowlist the way an inbound
-  connection did. No TLS on either leg, same accepted tradeoff as before as long as
-  everything's on a trusted network — revisit if a thin client and the broker end up
-  needing to cross an untrusted one.
+  connection did. TLS is opt-in on both legs, off by default (plaintext is still the
+  accepted tradeoff as long as everything's on a trusted network): the broker turns
+  it on for both its listeners by setting `tls_cert_file`/`tls_key_file`; each
+  client (thin client's `broker_tls`, MCP server's `broker_scheme=https`, or
+  `scripts/*.py`'s `--broker-scheme https`) turns it on by also setting a matching
+  `broker_cert_fingerprint`. Trust model is a self-signed certificate plus pinned
+  fingerprint verification (TOFU, like an SSH `known_hosts` entry) — not a private
+  CA or mutual TLS — since nothing in this system is ever reached by a DNS name,
+  only a raw LAN IP, so a public CA isn't an option and a private CA/mTLS would be
+  more PKI than this system's scale needs. See
+  `journeycapture_windows_thinclient.tls_pinning` and `docs/BROKER.md`'s "TLS setup"
+  section for the mechanics and cert-generation steps. This is additive to, not a
+  replacement for, the `api_key`/`machine_id` auth model above.
 - **`journeycapture_windows_thinclient.capture`/`input_control`** — unchanged by the broker
   work. All actual mouse/keyboard/screenshot logic lives here; nothing in these two
   modules knows or cares whether it's being called from an HTTP route (the old
@@ -209,7 +221,8 @@ not the thin client directly — the thin client's own REST API is retired (see 
 They read connection defaults from `scripts/config.json`, which is gitignored
 (contains real API keys) — there's no committed example for it, so recreate it
 locally with the field names each script's `--help` documents (`broker_host`,
-`broker_port`, `broker_scheme`, `machine_id`, `broker_api_key`).
+`broker_port`, `broker_scheme`, `machine_id`, `broker_api_key`, and
+`broker_cert_fingerprint` if `broker_scheme` is `https`).
 
 Manual-only checks that can't be scripted from macOS (DPI-scaling coordinate
 correctness, UIPI/elevated-window behavior, Firewall/AV prompts) are in
@@ -235,6 +248,13 @@ controller-side only, same reasoning as the `mcp` group.
   checked at websocket handshake time) are required; `host`/`http_port` (default
   `0.0.0.0:8600`) and `ws_host`/`ws_port` (default `0.0.0.0:8601`) are separate
   listen addresses for the two different protocols this process serves.
+  `machine_profiles`/`mcp_profile` (both default `{}`) are validated at load
+  time — every `machine_profiles` key must exist in `machines`, `screenshot`
+  sub-objects are validated by reusing `journeycapture_windows_thinclient.config.ScreenshotConfig`
+  (same cross-package-reuse precedent as `schemas.py` below), `log_level` against
+  `logging.getLevelNamesMapping()`, and both objects reject unknown keys — same
+  fail-fast-on-typo philosophy as everything else in this repo. See "Broker-pushed
+  config" below.
 - **`registry.py`** — `ConnectionRegistry` is the actual routing logic: maps
   `machine_id` → live websocket connection, and correlates each outgoing
   `{"id", "method", "params"}` message with the HTTP call `await`-ing a response, by
@@ -264,6 +284,33 @@ controller-side only, same reasoning as the `mcp` group.
 
 Full setup/API/testing details: `docs/BROKER.md`.
 
+### Broker-pushed config
+
+`machine_profiles` (`machine_id: {"screenshot": {...}, "log_level": ...}`) and
+`mcp_profile` (`{"save_screenshots": ..., "screenshot_dir": ..., "max_saved_screenshots": ...}`)
+in the broker's own config let it own that operational config centrally instead of
+every thin client / the MCP server needing its own local copy — both `{}` by
+default, so nothing here changes behavior unless configured. Only fields with no
+bearing on *finding or trusting* the broker are eligible for this — everything
+needed to reach the broker in the first place (`broker_host`/`broker_port`/
+`broker_tls`/`broker_cert_fingerprint`, a thin client's own `machine_id`/`api_key`)
+has to stay local, since there's no connection to push it over yet.
+
+`ws_server.py`'s handler always sends one more frame right after the handshake
+ack — `{"type": "config", **machine_profiles.get(machine_id, {})}`, `{"type":
+"config"}` if that machine has no profile — which `ws_client.py`'s
+`_apply_config_push` applies on top of the local `config.json` on every successful
+(re)connect. This is now a fixed part of the wire protocol (see
+`docs/THIN_AGENT_PLAYBOOK.md`'s §1), not optional — any new agent has to expect and
+consume this frame. The broker's `GET /mcp-config` route serves the same idea to
+the MCP server, fetched once at startup (`journeycapture_mcp/__init__.main()`,
+tolerant of the broker being briefly unreachable — logs a warning and falls back
+to local settings rather than refusing to start) and merged over `Settings` via
+`dataclasses.replace()` before `build_server()` is called.
+
+Full design and the exact JSON shapes: `docs/BROKER.md`'s "Broker-pushed config"
+section.
+
 ### `journeycapture_mcp` — the MCP server
 
 Lives in `src/journeycapture_mcp/`. Its dependencies (`mcp`, `httpx`) sit under the
@@ -288,7 +335,10 @@ Lives in `src/journeycapture_mcp/`. Its dependencies (`mcp`, `httpx`) sit under 
   broker's HTTP API. Every method takes a `machine` id as its first argument and
   builds a `/machines/{machine}/...` path. Raises `JourneyCaptureError` on non-2xx
   responses, with the response body included (that's where the broker's
-  `404`/`504`/`400` detail messages live).
+  `404`/`504`/`400` detail messages live). `get_mcp_config()` is the one exception
+  to the `/machines/{machine}/...` shape (it hits the broker's top-level
+  `/mcp-config`) and the one method that tolerates a `404` by returning `{}` instead
+  of raising — see "Broker-pushed config" above.
 - **`server.py`** — `build_server(client, settings)` builds an `MCPServer`
   (`mcp.server.mcpserver.MCPServer` — this SDK's current name for what used to be
   called `FastMCP`) and registers one `@server.tool()` per broker endpoint, plus
