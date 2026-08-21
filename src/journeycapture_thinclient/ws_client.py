@@ -9,6 +9,7 @@ from typing import Any, Callable
 import websockets
 from pydantic import ValidationError
 from websockets.asyncio.client import ClientConnection
+from websockets.asyncio.client import process_exception as _default_process_exception
 
 from journeycapture_thinclient import capture, input_control
 from journeycapture_thinclient.config import Config
@@ -35,6 +36,15 @@ class DispatchError(Exception):
 class RegistrationRejected(Exception):
     """The broker rejected our machine_id/api_key at the handshake — not recoverable
     by reconnecting, since the credentials themselves are wrong."""
+
+
+class BrokerUnreachable(Exception):
+    """Couldn't establish the very first connection to the broker after retrying —
+    distinct from losing a connection that was already established, which keeps
+    retrying indefinitely (see run()) since the broker coming back is expected."""
+
+
+_INITIAL_CONNECT_ATTEMPTS = 5
 
 
 def _handle_health(config: Config, params: dict) -> Any:
@@ -143,7 +153,26 @@ async def _dispatch(websocket: ClientConnection, config: Config, message: dict) 
 
 async def run(config: Config) -> None:
     uri = f"ws://{config.broker_host}:{config.broker_port}"
-    async for websocket in websockets.connect(uri, max_size=None):
+    connected_once = False
+    attempts = 0
+
+    def process_exception(exc: Exception) -> Exception | None:
+        nonlocal attempts
+        # Preserve the library's own fatal-vs-retryable classification first —
+        # only add our own bounded-attempts logic on top of what it already
+        # considers retryable (network errors like refused/unreachable/DNS failure).
+        classified = _default_process_exception(exc)
+        if classified is not None:
+            return classified
+        if connected_once:
+            return None  # reached the broker before; keep retrying forever on drops
+        attempts += 1
+        if attempts >= _INITIAL_CONNECT_ATTEMPTS:
+            return BrokerUnreachable(f"could not reach broker at {uri} after {attempts} attempts: {exc}")
+        return None
+
+    async for websocket in websockets.connect(uri, max_size=None, process_exception=process_exception):
+        connected_once = True
         try:
             await websocket.send(json.dumps({"machine_id": config.machine_id, "api_key": config.api_key}))
             ack = json.loads(await websocket.recv())

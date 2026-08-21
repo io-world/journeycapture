@@ -43,6 +43,15 @@ def main() -> None:
         logger.error("broker rejected this machine's credentials: %s", e)
         print(f"journeycapture: broker rejected this machine's credentials: {e}", file=sys.stderr)
         sys.exit(1)
+    except ws_client.BrokerUnreachable as e:
+        logger.error("%s", e)
+        print(
+            f"journeycapture: {e}\n"
+            "journeycapture: check that the broker is running and that broker_host/broker_port "
+            "in config.json are correct.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":
