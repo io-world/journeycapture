@@ -13,6 +13,7 @@ wheels/
 config.json
 mcp_config.json
 broker_config.json
+thinclient_config.json
 .mcp.json
 *.log
 *.spec

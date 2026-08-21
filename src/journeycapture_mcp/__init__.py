@@ -35,7 +35,7 @@ def main() -> None:
         print(f"journeycapture-mcp: {e}", file=sys.stderr)
         sys.exit(1)
 
-    logger.info("Configured for %s:%s (Windows box), listening on %s:%s", settings.host, settings.port, settings.mcp_host, settings.mcp_port)
+    logger.info("Configured for broker %s:%s, listening on %s:%s", settings.broker_host, settings.broker_port, settings.mcp_host, settings.mcp_port)
 
     client = JourneyCaptureClient(settings)
     server = build_server(client, settings)
