@@ -2,6 +2,44 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-20 — Example-config relocation, MCP startup crash fix, version 0.3.0
+
+- Moved `config.example.json`/`config.broker.example.json` out of the repo root into
+  `examples/`, updating every reference (`README.md`, `CLAUDE.md`, `docs/BROKER.md`,
+  `docs/WINDOWS_BUILD.md`, `docs/WINDOWS_SMOKE_TEST.md`, `scripts/build_windows.ps1`,
+  and the thin client's own missing-config error message) to match.
+- `.gitignore` now also covers `mcp_config.json`/`broker_config.json`/
+  `thinclient_config.json` — ad hoc local configs used to test against a real
+  broker/thin-client pair — alongside the pre-existing `config.json` entry.
+- Fixed a crash on every `journeycapture-mcp` startup: its one log line in `main()`
+  referenced `settings.host`/`settings.port`, attributes that don't exist on
+  `journeycapture_mcp.config.Settings` (only `broker_host`/`broker_port` do) — an
+  `AttributeError` before the server could even start listening.
+- Version bumped to `0.3.0`.
+
+## 2026-08-20 — Exit cleanly if the broker is unreachable at startup
+
+`ws_client.run()` previously retried the broker connection forever via `websockets`'
+auto-reconnecting iterator, so a thin client pointed at the wrong host/port, or
+started before the broker was up, just hung indefinitely logging "connect failed;
+reconnecting..." with no way to distinguish it from a transient network blip. Now
+bounds only the never-yet-connected case to 5 attempts via a custom
+`process_exception`, then raises `BrokerUnreachable`; a connection that drops after
+connecting successfully once still retries forever, unchanged, since the broker
+coming back mid-session is expected. `server.main()` catches `BrokerUnreachable` the
+same way it already does `RegistrationRejected`: a clear stderr message and
+`sys.exit(1)`.
+
+## 2026-08-20 — Screenshot filename collisions and a pytest teardown crash on Windows
+
+- `take_screenshot`'s local-save path named files by a microsecond timestamp alone;
+  Windows' coarser clock resolution let rapid successive calls collide and silently
+  overwrite the previous file. Added a collision-disambiguating suffix.
+- `scripts/build_windows.ps1` now points `pytest` at a repo-local `--basetemp` under
+  the gitignored `build/` dir instead of the default `%TEMP%\pytest-of-<user>` tree,
+  since a corrupted `pytest-current` symlink there could crash test teardown with an
+  unrelated `WinError 5` and abort the build.
+
 ## 2026-08-20 — Post-migration review fixes
 
 A review pass over the just-completed broker migration (all 4 phases) surfaced three
