@@ -10,7 +10,7 @@ class ConfigError(Exception):
     pass
 
 
-_MIN_KEY_LENGTH = 16  # matches journeycapture_thinclient.config.Config.api_key's min_length
+_MIN_KEY_LENGTH = 16  # matches journeycapture_windows_thinclient.config.Config.api_key's min_length
 
 
 def _validate_key_lengths(api_key: str, machines: dict[str, str]) -> None:

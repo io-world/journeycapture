@@ -3,7 +3,7 @@
 What each library in `pyproject.toml` is actually used for. Versions are lower
 bounds (`>=`); see `uv.lock` for exact resolved versions.
 
-## Thin client (`journeycapture_thinclient`) — base `dependencies`
+## Thin client (`journeycapture_windows_thinclient`) — base `dependencies`
 
 Runs on the Windows box. `scripts/build_windows.ps1`'s plain `uv sync` installs only
 this group — nothing below it.
@@ -45,12 +45,12 @@ Installed by default whenever `uv sync` runs (with or without `--extra mcp`/`--e
 | `pytest` | The test suite (`tests/`). |
 | `pytest-asyncio` | Enables `async def test_*` functions — needed for `journeycapture_mcp`'s and `journeycapture_broker`'s async tool/client/registry tests. |
 | `httpx` | Also here (not just the `mcp` extra) because `fastapi.testclient.TestClient` is built on it (used by `test_broker_http_api.py` too), and the live-testing `scripts/*.py` use it directly. |
-| `pyinstaller` | Packages `journeycapture_thinclient` into the standalone Windows `.exe` (`scripts/build_windows.ps1`, `docs/WINDOWS_BUILD.md`). |
+| `pyinstaller` | Packages `journeycapture_windows_thinclient` into the standalone Windows `.exe` (`scripts/build_windows.ps1`, `docs/WINDOWS_BUILD.md`). |
 
 ## Build backend
 
 `uv_build` (declared in `[build-system]`) — not a dependency of the code itself, it's
 what `uv` uses to build/install this project. `[tool.uv.build-backend].module-name`
-explicitly lists all three packages (`journeycapture_thinclient`,
+explicitly lists all three packages (`journeycapture_windows_thinclient`,
 `journeycapture_mcp`, `journeycapture_broker`) since this repo has three top-level
 packages under one `pyproject.toml`.

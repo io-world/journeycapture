@@ -2,6 +2,21 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-21 — Renamed journeycapture_thinclient to journeycapture_windows_thinclient
+
+The package is, and always has been, Windows-only in practice (`pynput`/`mss` are
+Windows-only there) — the name now says so, ahead of a second, non-Windows agent
+being added per `docs/THIN_AGENT_PLAYBOOK.md`, so "thin client" alone no longer
+implies "the Windows one" by default. Pure rename: `src/journeycapture_thinclient/`
+→ `src/journeycapture_windows_thinclient/`, updated everywhere it's imported
+(`journeycapture_broker`'s reuse of its `schemas` module included),
+`pyproject.toml`'s `journeycapture` console-script target and
+`[tool.uv.build-backend]` module list, `packaging/run.py`'s entry point import, and
+every doc/test reference. The `journeycapture` console-script name, the `.exe`
+filename, and every wire-protocol/config-field name are unchanged — this only
+renames the Python package. 88 tests still pass. Older changelog entries below
+still say `journeycapture_thinclient`, since that was its name at the time.
+
 ## 2026-08-20 — Example-config relocation, MCP startup crash fix, version 0.3.0
 
 - Moved `config.example.json`/`config.broker.example.json` out of the repo root into

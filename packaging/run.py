@@ -1,3 +1,3 @@
-from journeycapture_thinclient import main
+from journeycapture_windows_thinclient import main
 
 main()

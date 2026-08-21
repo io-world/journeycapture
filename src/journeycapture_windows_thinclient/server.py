@@ -5,10 +5,10 @@ import asyncio
 import logging
 import sys
 
-from journeycapture_thinclient import ws_client
-from journeycapture_thinclient.config import ConfigError, load_config, resolve_config_path
-from journeycapture_thinclient.logging_setup import configure_logging
-from journeycapture_thinclient.winutil import set_dpi_awareness
+from journeycapture_windows_thinclient import ws_client
+from journeycapture_windows_thinclient.config import ConfigError, load_config, resolve_config_path
+from journeycapture_windows_thinclient.logging_setup import configure_logging
+from journeycapture_windows_thinclient.winutil import set_dpi_awareness
 
 logger = logging.getLogger(__name__)
 

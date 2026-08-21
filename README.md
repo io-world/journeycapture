@@ -58,6 +58,14 @@ uv run journeycapture-mcp --config scripts/config.json
 See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options, the `machine`
 parameter every tool takes, and wiring it into an MCP client.
 
+## Adding a new agent for another OS
+
+The broker doesn't care what OS or language an agent is written in — only that it
+speaks its WebSocket protocol and always connects *out* to the broker, never the
+reverse. See [docs/THIN_AGENT_PLAYBOOK.md](docs/THIN_AGENT_PLAYBOOK.md) for the exact
+wire protocol and a recipe for writing a Linux/macOS/other agent that plugs into
+this same broker alongside `journeycapture_windows_thinclient`.
+
 ## Dependencies
 
 See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) for what each library is used for.

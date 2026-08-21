@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 
 from journeycapture_broker.config import Settings
 from journeycapture_broker.registry import ConnectionRegistry, MachineError, MachineNotConnected, MachineTimeout
-from journeycapture_thinclient.schemas import (
+from journeycapture_windows_thinclient.schemas import (
     KeyboardKeyRequest,
     KeyboardTypeRequest,
     KeyboardTypeResponse,

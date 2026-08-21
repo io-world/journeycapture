@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from journeycapture_thinclient import ws_client
-from journeycapture_thinclient.config import Config
+from journeycapture_windows_thinclient import ws_client
+from journeycapture_windows_thinclient.config import Config
 
 
 @pytest.fixture
@@ -23,20 +23,20 @@ def test_handle_health(config: Config) -> None:
 def test_handle_screenshot_monitors(config: Config) -> None:
     fake_monitor = Mock()
     fake_monitor.model_dump.return_value = {"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080}
-    with patch("journeycapture_thinclient.ws_client.capture.list_monitors", return_value=[fake_monitor]):
+    with patch("journeycapture_windows_thinclient.ws_client.capture.list_monitors", return_value=[fake_monitor]):
         result = ws_client._handle_screenshot_monitors(config, {})
     assert result == [{"index": 0, "left": 0, "top": 0, "width": 1920, "height": 1080}]
 
 
 def test_handle_mouse_move(config: Config) -> None:
-    with patch("journeycapture_thinclient.ws_client.input_control.move_mouse", return_value=(10, 20)) as mock_move:
+    with patch("journeycapture_windows_thinclient.ws_client.input_control.move_mouse", return_value=(10, 20)) as mock_move:
         result = ws_client._handle_mouse_move(config, {"x": 10, "y": 20})
     mock_move.assert_called_once_with(10, 20, relative=False)
     assert result == {"status": "ok", "x": 10, "y": 20}
 
 
 def test_handle_mouse_click(config: Config) -> None:
-    with patch("journeycapture_thinclient.ws_client.input_control.click_mouse") as mock_click:
+    with patch("journeycapture_windows_thinclient.ws_client.input_control.click_mouse") as mock_click:
         result = ws_client._handle_mouse_click(config, {"button": "left"})
     mock_click.assert_called_once_with(button="left", action="click", clicks=1, x=None, y=None)
     assert result == {"status": "ok"}
@@ -50,14 +50,14 @@ def test_handle_mouse_click_partial_xy_raises(config: Config) -> None:
 
 
 def test_handle_keyboard_type(config: Config) -> None:
-    with patch("journeycapture_thinclient.ws_client.input_control.type_text", return_value=5):
+    with patch("journeycapture_windows_thinclient.ws_client.input_control.type_text", return_value=5):
         result = ws_client._handle_keyboard_type(config, {"text": "hello"})
     assert result == {"status": "ok", "length": 5}
 
 
 def test_handle_keyboard_key_unknown_key_raises_dispatch_error(config: Config) -> None:
     with patch(
-        "journeycapture_thinclient.ws_client.input_control.send_keys",
+        "journeycapture_windows_thinclient.ws_client.input_control.send_keys",
         side_effect=ValueError("unknown key: 'bogus'"),
     ):
         with pytest.raises(ws_client.DispatchError):
@@ -76,7 +76,7 @@ async def test_dispatch_unknown_method_sends_error(config: Config) -> None:
 @pytest.mark.asyncio
 async def test_dispatch_success_sends_result(config: Config) -> None:
     websocket = AsyncMock()
-    with patch("journeycapture_thinclient.ws_client.input_control.scroll_mouse") as mock_scroll:
+    with patch("journeycapture_windows_thinclient.ws_client.input_control.scroll_mouse") as mock_scroll:
         await ws_client._dispatch(websocket, config, {"id": "2", "method": "mouse_scroll", "params": {"dx": 1, "dy": -1}})
     mock_scroll.assert_called_once_with(dx=1, dy=-1)
     sent = json.loads(websocket.send.call_args.args[0])
@@ -96,7 +96,7 @@ async def test_dispatch_validation_error_sends_error(config: Config) -> None:
 async def test_handle_screenshot_sends_metadata_then_binary_frame(config: Config) -> None:
     websocket = AsyncMock()
     with patch(
-        "journeycapture_thinclient.ws_client.capture.take_screenshot",
+        "journeycapture_windows_thinclient.ws_client.capture.take_screenshot",
         return_value=(b"fake-jpeg-bytes", "image/jpeg"),
     ):
         await ws_client._dispatch(websocket, config, {"id": "4", "method": "screenshot", "params": {}})
@@ -112,7 +112,7 @@ async def test_handle_screenshot_sends_metadata_then_binary_frame(config: Config
 async def test_handle_screenshot_bad_monitor_sends_error(config: Config) -> None:
     websocket = AsyncMock()
     with patch(
-        "journeycapture_thinclient.ws_client.capture.take_screenshot",
+        "journeycapture_windows_thinclient.ws_client.capture.take_screenshot",
         side_effect=ValueError("monitor index 9 out of range"),
     ):
         await ws_client._dispatch(websocket, config, {"id": "5", "method": "screenshot", "params": {"monitor": 9}})
@@ -130,6 +130,6 @@ async def test_run_raises_on_rejected_registration(config: Config) -> None:
     async def fake_connect(*args, **kwargs):
         yield websocket
 
-    with patch("journeycapture_thinclient.ws_client.websockets.connect", fake_connect):
+    with patch("journeycapture_windows_thinclient.ws_client.websockets.connect", fake_connect):
         with pytest.raises(ws_client.RegistrationRejected, match="invalid api_key"):
             await ws_client.run(config)

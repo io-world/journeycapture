@@ -94,7 +94,7 @@ since `host` defaults to `0.0.0.0` (unlike the MCP server's loopback-only defaul
 means anyone on the network by default, not just in an unusual deployment.
 
 Request/response shapes are identical to the thin client's original REST API — the
-broker reuses `journeycapture_thinclient.schemas` directly rather than duplicating
+broker reuses `journeycapture_windows_thinclient.schemas` directly rather than duplicating
 them. A request for a machine id that isn't currently connected gets `404`; a machine
 that doesn't respond within `request_timeout` gets `504`; an error the thin client
 itself reports (e.g. an unknown key name) gets `400`.

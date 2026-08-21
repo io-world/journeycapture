@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Three components in one repo, meant to run on (potentially) three different machines:
 
 ```
-MCP client  --stdio/HTTP-->  journeycapture_mcp  --HTTP-->  journeycapture_broker  <--WebSocket--  journeycapture_thinclient(s)
+MCP client  --stdio/HTTP-->  journeycapture_mcp  --HTTP-->  journeycapture_broker  <--WebSocket--  journeycapture_windows_thinclient(s)
 ```
 
-- **`journeycapture_thinclient`** — a Windows thin client that drives mouse/keyboard/
+- **`journeycapture_windows_thinclient`** — a Windows thin client that drives mouse/keyboard/
   screenshot capture. Cross-platform Python, but only ever *run* as a packaged `.exe`
   on a real Windows desktop — `pynput`/`mss` are Windows-only in practice. It does
   **not** run a server — it connects *out* to the broker over a websocket and stays
@@ -41,7 +41,7 @@ Thin client config: copy `examples/config.example.json` to `config.json`, set `b
 `machine_id`/`api_key` to match an entry in the broker's own `machines` config.
 Config path resolution order: `--config PATH` CLI arg → `JOURNEYCAPTURE_CONFIG` env
 var → `config.json` next to the executable (or CWD when run from source). Refuses to
-start on a missing/invalid config (see `journeycapture_thinclient.config.load_config`).
+start on a missing/invalid config (see `journeycapture_windows_thinclient.config.load_config`).
 
 Broker config: copy `examples/config.broker.example.json`, set its own `api_key` (what the MCP
 server authenticates with) and a `machines` map of `machine_id: api_key` pairs — see
@@ -53,21 +53,21 @@ There is no lint/format command configured in this repo.
 
 ### Retired: the thin client's REST API
 
-Through `2026-08-19`, `journeycapture_thinclient` ran its own FastAPI/uvicorn HTTP
+Through `2026-08-19`, `journeycapture_windows_thinclient` ran its own FastAPI/uvicorn HTTP
 server (`api.py`, `routes/`, `security.py`), authenticated by an API-key header plus a
 source-IP allowlist. That's gone — replaced by the broker/websocket design described
 above, to prep the architecture for multiple machines and machines that aren't
 directly network-reachable from the controller (NAT/firewalls). If you're reading
 old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, or
-`journeycapture_thinclient.routes`, it's describing the pre-broker design — the
+`journeycapture_windows_thinclient.routes`, it's describing the pre-broker design — the
 *behavior* those routes implemented still exists, just reachable through the broker's
 `/machines/{id}/...` HTTP API now, not directly from the thin client. See
 `docs/CHANGELOG.md`'s broker entries for the full reasoning.
 
-- **`journeycapture_thinclient.server`** — entry point (`main()`). Loads config, sets
+- **`journeycapture_windows_thinclient.server`** — entry point (`main()`). Loads config, sets
   up logging, calls `winutil.set_dpi_awareness()` (Windows-only, no-op elsewhere),
   then runs `asyncio.run(ws_client.run(config))`.
-- **`journeycapture_thinclient.ws_client`** — connects to the broker via
+- **`journeycapture_windows_thinclient.ws_client`** — connects to the broker via
   `websockets.connect()`'s built-in auto-reconnect-with-backoff
   (`async for websocket in connect(...)`), sends a `{"machine_id", "api_key"}`
   handshake, then loops reading `{"id", "method", "params"}` messages and dispatching
@@ -91,17 +91,17 @@ old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, 
   connection did. No TLS on either leg, same accepted tradeoff as before as long as
   everything's on a trusted network — revisit if a thin client and the broker end up
   needing to cross an untrusted one.
-- **`journeycapture_thinclient.capture`/`input_control`** — unchanged by the broker
+- **`journeycapture_windows_thinclient.capture`/`input_control`** — unchanged by the broker
   work. All actual mouse/keyboard/screenshot logic lives here; nothing in these two
   modules knows or cares whether it's being called from an HTTP route (the old
   design) or a websocket dispatch table (now).
-- **`journeycapture_thinclient.config.Config`** — pydantic model with
+- **`journeycapture_windows_thinclient.config.Config`** — pydantic model with
   `extra="forbid"`, so an unrecognized config key is a hard validation error, not a
   silent no-op. Same philosophy in `schemas.py` (shared with the broker — see below):
   `MouseClickRequest` has a `model_validator` rejecting a lone `x` or `y` (must be
   given together, or both omitted) with a validation error — it used to silently
   ignore a partial pair and click at the current cursor position instead.
-- **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture_thinclient import
+- **`packaging/run.py`** — the PyInstaller entry point (`from journeycapture_windows_thinclient import
   main; main()`), kept as a separate file from `server.py` deliberately for the build.
 
 ### Keyboard typing is intentionally paced
@@ -254,7 +254,7 @@ controller-side only, same reasoning as the `mcp` group.
   comparison philosophy the retired thin-client REST auth used to have.
 - **`http_api.py`** — FastAPI app exposing `/machines` (list connected ids) and
   `/machines/{id}/...` mirroring the thin client's original route shapes exactly,
-  reusing `journeycapture_thinclient.schemas` directly for request/response models
+  reusing `journeycapture_windows_thinclient.schemas` directly for request/response models
   rather than duplicating them (same repo, no reason not to). Translates
   `ConnectionRegistry`'s `MachineNotConnected`/`MachineTimeout`/`MachineError`
   exceptions into `404`/`504`/`400` respectively.
@@ -283,7 +283,7 @@ Lives in `src/journeycapture_mcp/`. Its dependencies (`mcp`, `httpx`) sit under 
   `journeycapture-mcp.log` both rotate rather than growing forever; 0 or negative
   disables pruning). Fails fast with a clear stderr message if broker_host/
   broker_api_key are missing either way (mirrors
-  `journeycapture_thinclient.config.load_config`'s fail-fast philosophy).
+  `journeycapture_windows_thinclient.config.load_config`'s fail-fast philosophy).
 - **`client.py`** — `JourneyCaptureClient`, an async `httpx`-based wrapper around the
   broker's HTTP API. Every method takes a `machine` id as its first argument and
   builds a `/machines/{machine}/...` path. Raises `JourneyCaptureError` on non-2xx
@@ -311,7 +311,7 @@ Lives in `src/journeycapture_mcp/`. Its dependencies (`mcp`, `httpx`) sit under 
   single clicks too far apart to register as a real double-click on the target
   machine.
 - **`logging_setup.py`** — same console + rotating-file-handler pattern as
-  `journeycapture_thinclient.logging_setup`, writing to `journeycapture-mcp.log` next
+  `journeycapture_windows_thinclient.logging_setup`, writing to `journeycapture-mcp.log` next
   to wherever the command was run from.
 - **`__init__.main()`** — the `journeycapture-mcp` console-script entry point: loads
   config, builds the client and server, calls

@@ -11,9 +11,9 @@ from pydantic import ValidationError
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import process_exception as _default_process_exception
 
-from journeycapture_thinclient import capture, input_control
-from journeycapture_thinclient.config import Config
-from journeycapture_thinclient.schemas import (
+from journeycapture_windows_thinclient import capture, input_control
+from journeycapture_windows_thinclient.config import Config
+from journeycapture_windows_thinclient.schemas import (
     KeyboardKeyRequest,
     KeyboardTypeRequest,
     MouseClickRequest,
