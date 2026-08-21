@@ -1,7 +1,9 @@
 # JourneyCapture
 
-Remote-controls Windows desktops (mouse, keyboard, screenshots) through three
-components:
+Lets an MCP-aware AI assistant see and drive a real Windows desktop — take
+screenshots, move the mouse, click, and type — the same way a human would, so it can
+carry out on-screen tasks in apps that have no API of their own. Remote-controls
+Windows desktops (mouse, keyboard, screenshots) through three components:
 
 ```
 MCP client  --stdio/HTTP-->  MCP server  --HTTP-->  broker  <--WebSocket--  thin client(s)
