@@ -28,7 +28,7 @@ falls back to the environment variables.
 **File** (`--config PATH`):
 
 ```
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/mcp/mcp_config.json
 ```
 
 Recognized keys: `broker_host`, `broker_api_key` (both required — `broker_api_key`
@@ -68,7 +68,7 @@ This server speaks MCP over **streamable HTTP**, not stdio — you start it your
 separately from your MCP client, and it keeps running until you stop it:
 
 ```
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/mcp/mcp_config.json
 ```
 
 By default it binds `127.0.0.1:8000` — loopback only, so nothing off this machine can
@@ -182,7 +182,7 @@ whichever keys the broker actually has configured. See `docs/BROKER.md`'s
 `tests/test_mcp_client.py` and `tests/test_mcp_server.py` require the `mcp` extra;
 they call `pytest.importorskip("mcp")` so they're skipped (not failed) when it isn't
 installed — which is the normal state on the Windows build, since
-`scripts/build_windows.ps1` only runs a plain `uv sync`. Run
+`scripts/thinclient/build_windows.ps1` only runs a plain `uv sync`. Run
 `uv sync --extra mcp && uv run pytest -q` to include them.
 
 No live broker/machine is needed for these tests — `test_mcp_client.py` mocks the

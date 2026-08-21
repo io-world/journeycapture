@@ -8,8 +8,8 @@ the primary monitor's top-left corner — see CLAUDE.md), then does one relative
 Reads defaults from config.json next to this script (same file used by
 get_screenshot.py / send_text.py). Any CLI flag overrides the matching config value:
 
-    uv run python scripts/move_mouse.py
-    uv run python scripts/move_mouse.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc
+    uv run python scripts/testing/move_mouse.py
+    uv run python scripts/testing/move_mouse.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc
 """
 
 from __future__ import annotations

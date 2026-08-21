@@ -11,12 +11,12 @@ Windows box itself.
 Once a broker is running and `journeycapture.exe` on the Windows box is configured
 with that broker's `broker_host`/`broker_port` and a `machine_id`/`api_key` registered
 in the broker's own config, run
-[`scripts/live_check.py`](../scripts/live_check.py) from any machine that can reach
-the broker (this dev machine, a teammate's laptop — not the Windows box or the broker
-itself):
+[`scripts/testing/live_check.py`](../scripts/testing/live_check.py) from any machine
+that can reach the broker (this dev machine, a teammate's laptop — not the Windows
+box or the broker itself):
 
 ```
-uv run python scripts/live_check.py --broker-host <broker-ip> --api-key <broker-key> --machine <machine-id>
+uv run python scripts/testing/live_check.py --broker-host <broker-ip> --api-key <broker-key> --machine <machine-id>
 ```
 
 This covers `/health`, wrong-key rejection (401), `/screenshot/monitors`, and

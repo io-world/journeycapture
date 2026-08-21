@@ -11,8 +11,8 @@ should launch it.
 Reads defaults from config.json next to this script (same file used by the other
 scripts). Any CLI flag overrides the matching config value:
 
-    uv run python scripts/click_test.py
-    uv run python scripts/click_test.py --x 493 --y 131
+    uv run python scripts/testing/click_test.py
+    uv run python scripts/testing/click_test.py --x 493 --y 131
 """
 
 from __future__ import annotations

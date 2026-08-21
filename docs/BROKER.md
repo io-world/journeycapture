@@ -88,7 +88,7 @@ fully trust (see `CLAUDE.md`'s "Auth model now" section for the full reasoning).
 There's no DNS name anywhere in this system (the broker is always reached by a raw
 LAN IP), so a public CA like Let's Encrypt isn't an option. Instead: generate one
 self-signed certificate for the broker, and give each client (thin client, MCP
-server, or a `scripts/*.py` live-test script) that certificate's fingerprint to pin
+server, or a `scripts/testing/*.py` live-test script) that certificate's fingerprint to pin
 — the client verifies the broker presents *that exact certificate* on every
 connection, the same trust-on-first-use model as an SSH `known_hosts` entry. This is
 purely transport security; the existing `api_key`/`machine_id` auth above is
@@ -111,7 +111,7 @@ private key must never be committed) rather than in `examples/`.
 
 Set `tls_cert_file`/`tls_key_file` in `broker_config.json` to those two paths and
 restart the broker. Then, on every client: set `broker_tls: true` (thin client) or
-`broker_scheme: "https"` (MCP server / `scripts/*.py --broker-scheme https`), plus
+`broker_scheme: "https"` (MCP server / `scripts/testing/*.py --broker-scheme https`), plus
 `broker_cert_fingerprint` set to the fingerprint the second `openssl` command
 printed (colons optional — the fingerprint isn't a secret, safe to paste anywhere).
 
@@ -240,4 +240,4 @@ websocket, and `test_broker_http_api.py` mocks the registry itself under a real
 For an actual end-to-end check, run a broker and point a real thin client's
 `config.json` at it (matching `machine_id`/`api_key`), then hit
 `GET /machines/{id}/health` through the broker directly, or use
-`scripts/live_check.py` (see `CLAUDE.md`) once it's updated to go through the broker.
+`scripts/testing/live_check.py` (see `CLAUDE.md`).

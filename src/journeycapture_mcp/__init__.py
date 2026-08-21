@@ -22,7 +22,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--config",
         default=None,
-        help="Path to a JSON config file (e.g. scripts/config.json) with host/api_key/etc. "
+        help="Path to a JSON config file (e.g. scripts/mcp/mcp_config.json) with broker_host/broker_api_key/etc. "
         "Overrides the JOURNEYCAPTURE_* environment variables when given.",
     )
     return parser.parse_args(argv)

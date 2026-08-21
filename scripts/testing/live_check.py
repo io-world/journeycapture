@@ -6,8 +6,8 @@ Exercises health, monitors, screenshot, and optionally the mouse/keyboard routes
 one machine behind the broker, and prints a pass/fail summary.
 
 Usage:
-    uv run python scripts/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc
-    uv run python scripts/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc --with-mouse --with-keyboard
+    uv run python scripts/testing/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc
+    uv run python scripts/testing/live_check.py --broker-host 192.168.1.10 --api-key <broker-key> --machine office-pc --with-mouse --with-keyboard
 """
 
 from __future__ import annotations

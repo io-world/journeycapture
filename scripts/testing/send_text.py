@@ -7,8 +7,8 @@ sure the right window is focused before running it.
 Reads defaults from config.json next to this script (same file used by the other
 scripts). Any CLI flag overrides the matching config value:
 
-    uv run python scripts/send_text.py --text "hello world"
-    uv run python scripts/send_text.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc --text "hi"
+    uv run python scripts/testing/send_text.py --text "hello world"
+    uv run python scripts/testing/send_text.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc --text "hi"
 """
 
 from __future__ import annotations

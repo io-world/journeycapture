@@ -5,7 +5,7 @@ bounds (`>=`); see `uv.lock` for exact resolved versions.
 
 ## Thin client (`journeycapture_windows_thinclient`) — base `dependencies`
 
-Runs on the Windows box. `scripts/build_windows.ps1`'s plain `uv sync` installs only
+Runs on the Windows box. `scripts/thinclient/build_windows.ps1`'s plain `uv sync` installs only
 this group — nothing below it.
 
 | Library | Used for |
@@ -44,8 +44,8 @@ Installed by default whenever `uv sync` runs (with or without `--extra mcp`/`--e
 |---|---|
 | `pytest` | The test suite (`tests/`). |
 | `pytest-asyncio` | Enables `async def test_*` functions — needed for `journeycapture_mcp`'s and `journeycapture_broker`'s async tool/client/registry tests. |
-| `httpx` | Also here (not just the `mcp` extra) because `fastapi.testclient.TestClient` is built on it (used by `test_broker_http_api.py` too), and the live-testing `scripts/*.py` use it directly. |
-| `pyinstaller` | Packages `journeycapture_windows_thinclient` into the standalone Windows `.exe` (`scripts/build_windows.ps1`, `docs/WINDOWS_BUILD.md`). |
+| `httpx` | Also here (not just the `mcp` extra) because `fastapi.testclient.TestClient` is built on it (used by `test_broker_http_api.py` too), and the live-testing `scripts/testing/*.py` use it directly. |
+| `pyinstaller` | Packages `journeycapture_windows_thinclient` into the standalone Windows `.exe` (`scripts/thinclient/build_windows.ps1`, `docs/WINDOWS_BUILD.md`). |
 
 ## Build backend
 

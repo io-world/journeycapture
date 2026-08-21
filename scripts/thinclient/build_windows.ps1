@@ -15,7 +15,7 @@ Set-StrictMode -Version Latest
 # Do NOT set $ErrorActionPreference = 'Stop' — uv writes info to stderr which
 # would be treated as a terminating error. Exit codes are checked explicitly.
 
-$Root = Split-Path $PSScriptRoot -Parent
+$Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 Set-Location $Root
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }

@@ -233,7 +233,7 @@ equally to a Linux or Mac agent, not just the Windows one.
   logic, config validation) can and should be unit tested with the OS-specific
   functions mocked out, on any dev machine — mirror
   `tests/test_ws_client.py`/`tests/test_input_control.py`'s structure.
-- Add the new agent to `scripts/live_check.py`-style smoke testing: point
+- Add the new agent to `scripts/testing/live_check.py`-style smoke testing: point
   `--broker-host`/`--machine` at the new agent's `machine_id` and run the existing
   script unchanged — it already only talks to the broker's HTTP API, so it works
   against any agent behind it with zero script changes.

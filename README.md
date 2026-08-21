@@ -65,7 +65,7 @@ openssl x509 -in broker_cert.pem -noout -fingerprint -sha256
 Set `tls_cert_file`/`tls_key_file` in `broker_config.json` to those two paths, then
 give every client (thin client's `broker_tls`+`broker_cert_fingerprint`, MCP
 server's `broker_scheme: "https"`+`broker_cert_fingerprint`, or
-`scripts/*.py --broker-scheme https --broker-cert-fingerprint ...`) the fingerprint
+`scripts/testing/*.py --broker-scheme https --broker-cert-fingerprint ...`) the fingerprint
 the second command printed. See [docs/BROKER.md](docs/BROKER.md)'s "TLS setup"
 section for the full explanation (why a self-signed cert + pinned fingerprint
 instead of a CA, and what to do if the cert is ever regenerated).
@@ -87,7 +87,7 @@ config" section for the full design.
 
 ```
 uv sync --extra mcp
-uv run journeycapture-mcp --config scripts/mcp_config.json
+uv run journeycapture-mcp --config scripts/mcp/mcp_config.json
 ```
 
 See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for configuration options, the `machine`

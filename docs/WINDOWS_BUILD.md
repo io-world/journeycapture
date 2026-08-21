@@ -16,7 +16,7 @@ cd journeycapture
 ## 1. One-shot build
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\thinclient\build_windows.ps1
 ```
 
 This does everything through step 6 below in one command: installs `uv` if it's
@@ -34,7 +34,7 @@ repo first, or the script/`.venv` paths below won't resolve:
 
 ```powershell
 cd "C:\Users\me\OneDrive\Desktop\JourneyCapture"
-.\scripts\build_windows.ps1
+.\scripts\thinclient\build_windows.ps1
 ```
 
 Skip to [step 6](#6-set-up-configjson-next-to-the-exe) to configure and run it. The
@@ -136,7 +136,7 @@ release on its own.
 
 The build succeeding doesn't mean mouse/keyboard/screenshot behavior is correct —
 walk through [WINDOWS_SMOKE_TEST.md](WINDOWS_SMOKE_TEST.md) next, or use the
-`scripts/*.py` live-testing scripts from a controller machine (see `CLAUDE.md`).
+`scripts/testing/*.py` live-testing scripts from a controller machine (see `CLAUDE.md`).
 
 ## Known friction
 
@@ -155,7 +155,7 @@ permissions problem. Fix by rebuilding `.venv` from scratch:
 
 ```powershell
 Remove-Item -Recurse -Force .venv
-.\scripts\build_windows.ps1
+.\scripts\thinclient\build_windows.ps1
 ```
 
 (`.venv` is gitignored/disposable — `uv sync` recreates it.) If you were in an
@@ -168,8 +168,8 @@ outside OneDrive via the `UV_PROJECT_ENVIRONMENT` env var.
 read what failed.** This happens when the script is launched in a way that closes its
 host window on exit (e.g. double-clicking the `.ps1`, or some "Run with PowerShell"
 shortcuts) rather than run inside a window that stays open. Run it from an already-open
-PowerShell window instead (`cd` to the repo, then `.\scripts\build_windows.ps1`), or
-capture output to a file to inspect after the fact: `.\scripts\build_windows.ps1 *>&1 |
+PowerShell window instead (`cd` to the repo, then `.\scripts\thinclient\build_windows.ps1`), or
+capture output to a file to inspect after the fact: `.\scripts\thinclient\build_windows.ps1 *>&1 |
 Tee-Object build_log.txt`.
 
 ## Optional: CI builds instead of a personal Windows box

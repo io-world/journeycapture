@@ -34,7 +34,7 @@ uv sync --extra broker     # also install deps for the broker (controller-side o
 uv sync --extra mcp        # also install deps for the MCP server (controller-side only)
 uv run journeycapture      # run the thin client from source (needs config.json - see below)
 uv run journeycapture-broker --config broker_config.json  # run the broker
-uv run journeycapture-mcp --config scripts/mcp_config.json  # run the MCP server
+uv run journeycapture-mcp --config scripts/mcp/mcp_config.json  # run the MCP server
 uv run pytest -q           # run the full test suite
 uv run pytest tests/test_config.py::test_valid_config_parses_with_defaults  # run a single test
 ```
@@ -94,7 +94,7 @@ old context (commits, docs, memory) that mentions `/mouse/move`, `allowed_ips`, 
   accepted tradeoff as long as everything's on a trusted network): the broker turns
   it on for both its listeners by setting `tls_cert_file`/`tls_key_file`; each
   client (thin client's `broker_tls`, MCP server's `broker_scheme=https`, or
-  `scripts/*.py`'s `--broker-scheme https`) turns it on by also setting a matching
+  `scripts/testing/*.py`'s `--broker-scheme https`) turns it on by also setting a matching
   `broker_cert_fingerprint`. Trust model is a self-signed certificate plus pinned
   fingerprint verification (TOFU, like an SSH `known_hosts` entry) — not a private
   CA or mutual TLS — since nothing in this system is ever reached by a DNS name,
@@ -196,32 +196,40 @@ and never touches this — only an explicit `down`/`press` schedules a timer. Se
 
 ### Testing against a real Windows instance
 
-Since `pynput`/`mss` behavior and the packaged `.exe` can only be fully verified on
-real Windows hardware, `scripts/` holds standalone httpx-based scripts for live
-testing, run from any machine that can reach the target (never on the thin client
-itself):
+`scripts/` is organized by which component each file's config belongs to —
+`scripts/broker/` (`broker_config.json`, plus `broker_cert.pem`/`broker_key.pem` if
+TLS is on), `scripts/mcp/` (`mcp_config.json`), `scripts/thinclient/`
+(`thinclient_config.json`, `build_windows.ps1`) — with everything else (the live-test
+scripts below, and their own shared config) under `scripts/testing/`. Every file
+under these five directories except `build_windows.ps1` is gitignored (all contain
+real API keys or private key material).
 
-- `scripts/live_check.py` — full smoke test: health, wrong-key rejection, monitors,
-  screenshot, optional `--with-mouse`/`--with-keyboard` round trips.
-- `scripts/get_screenshot.py` — fetch one screenshot, saved as a timestamped file
-  under `screenshot_dir` (same config key/default `journeycapture_mcp`'s optional
-  local-saving feature uses, so both land in one shared folder) unless `--out` gives
-  an exact path.
-- `scripts/send_text.py` — type a `TEXT` string (edit the constant at the top of the
-  file) into whatever window has focus remotely.
-- `scripts/move_mouse.py` — walk the cursor through the primary monitor's corners and
-  center plus one relative move, checking the reported position against what was
-  requested at each step.
-- `scripts/click_test.py` — single-click vs double-click at a fixed point, saving
-  before/after screenshots so you can visually confirm a single click selects without
-  launching and a double click launches.
+Since `pynput`/`mss` behavior and the packaged `.exe` can only be fully verified on
+real Windows hardware, `scripts/testing/` holds standalone httpx-based scripts for
+live testing, run from any machine that can reach the target (never on the thin
+client itself):
+
+- `scripts/testing/live_check.py` — full smoke test: health, wrong-key rejection,
+  monitors, screenshot, optional `--with-mouse`/`--with-keyboard` round trips.
+- `scripts/testing/get_screenshot.py` — fetch one screenshot, saved as a timestamped
+  file under `screenshot_dir` (same config key/default `journeycapture_mcp`'s
+  optional local-saving feature uses, so both land in one shared folder) unless
+  `--out` gives an exact path.
+- `scripts/testing/send_text.py` — type a `TEXT` string (edit the constant at the top
+  of the file) into whatever window has focus remotely.
+- `scripts/testing/move_mouse.py` — walk the cursor through the primary monitor's
+  corners and center plus one relative move, checking the reported position against
+  what was requested at each step.
+- `scripts/testing/click_test.py` — single-click vs double-click at a fixed point,
+  saving before/after screenshots so you can visually confirm a single click selects
+  without launching and a double click launches.
 
 All five route through the broker (`{broker_scheme}://{broker_host}:{broker_port}/machines/{machine_id}/...`),
 not the thin client directly — the thin client's own REST API is retired (see above).
-They read connection defaults from `scripts/config.json`, which is gitignored
-(contains real API keys) — there's no committed example for it, so recreate it
-locally with the field names each script's `--help` documents (`broker_host`,
-`broker_port`, `broker_scheme`, `machine_id`, `broker_api_key`, and
+They read connection defaults from `scripts/testing/config.json`, which is
+gitignored (contains real API keys) — there's no committed example for it, so
+recreate it locally with the field names each script's `--help` documents
+(`broker_host`, `broker_port`, `broker_scheme`, `machine_id`, `broker_api_key`, and
 `broker_cert_fingerprint` if `broker_scheme` is `https`).
 
 Manual-only checks that can't be scripted from macOS (DPI-scaling coordinate
@@ -232,7 +240,7 @@ correctness, UIPI/elevated-window behavior, Firewall/AV prompts) are in
 
 Must run on real Windows (PyInstaller doesn't cross-compile) — see
 `docs/WINDOWS_BUILD.md` for the full manual walkthrough, or run
-`scripts/build_windows.ps1` for the one-shot version (installs `uv` if missing, syncs
+`scripts/thinclient/build_windows.ps1` for the one-shot version (installs `uv` if missing, syncs
 deps, runs the test suite, builds a version-named `dist/journeycapture-<version>.exe`
 via PyInstaller, copies `examples/config.example.json` → `dist/config.json` if missing).
 

@@ -11,10 +11,10 @@ screenshot_dir (same config key and default journeycapture_mcp's optional
 local-saving feature uses) with a timestamped filename, unless --out gives an exact
 path:
 
-    uv run python scripts/get_screenshot.py
-    uv run python scripts/get_screenshot.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc
-    uv run python scripts/get_screenshot.py --monitor 1 --format png --dir shots
-    uv run python scripts/get_screenshot.py --out desktop.png
+    uv run python scripts/testing/get_screenshot.py
+    uv run python scripts/testing/get_screenshot.py --broker-host 192.168.1.10 --api-key <key> --machine office-pc
+    uv run python scripts/testing/get_screenshot.py --monitor 1 --format png --dir shots
+    uv run python scripts/testing/get_screenshot.py --out desktop.png
 """
 
 from __future__ import annotations
