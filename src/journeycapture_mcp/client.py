@@ -36,6 +36,14 @@ class JourneyCaptureClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    def set_timeout(self, timeout: float) -> None:
+        """Update the underlying httpx client's timeout after construction — used
+        when the broker's mcp_profile pushes a timeout different from the one
+        settings.timeout had at __init__ time (see docs/BROKER.md's "Broker-pushed
+        config"). httpx.Client.timeout has a public setter, so no reconnect/rebuild
+        (and no redundant second TLS-pinning handshake when TLS is on) is needed."""
+        self._client.timeout = timeout
+
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
             resp = await self._client.request(method, path, **kwargs)

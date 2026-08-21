@@ -2,6 +2,32 @@
 
 Notable changes to JourneyCapture, newest first. Commit hashes refer to `main`.
 
+## 2026-08-21 — Broker-pushed config is now the recommended primary path
+
+Reframed broker-pushed config (previous entry, below) from an opt-in bolt-on to
+the recommended, primary way to set operational config — each client's local
+`config.json` is documented as the fallback for whatever the broker doesn't
+provide, not the other way around. No change to the actual fallback/resilience
+behavior (a broker that's briefly unreachable at startup still just leaves the
+MCP server on local settings with a warning, exactly as before) — this was
+explicitly decided against a stricter "hard requirement to start" alternative.
+
+- MCP's `mcp_profile` allowlist gains `timeout` (alongside the existing
+  `save_screenshots`/`screenshot_dir`/`max_saved_screenshots`). Two other
+  candidates were considered and declined: `mcp_host`/`mcp_port` (would let a
+  broker-side config change silently move the MCP server's bind address, undermining
+  the loopback-only default that's the only thing preventing unauthenticated
+  remote control) and a thin client's `log_file` (would require live-swapping
+  the active `RotatingFileHandler`'s target file, real complexity for a setting
+  nobody's asked to centralize).
+- New `JourneyCaptureClient.set_timeout()` — a pushed `timeout` needs one extra
+  step beyond the existing `dataclasses.replace()` merge, since `client`'s own
+  `httpx.AsyncClient` was already built with the old value at construction time.
+  `httpx.Client.timeout` has a public setter, so this updates it directly rather
+  than rebuilding the client (which would redo the TLS-pinning handshake
+  unnecessarily when TLS is on).
+- 132 tests passing (was 131).
+
 ## 2026-08-21 — Broker-pushed config
 
 The broker can now own operational config centrally (`machine_profiles`/

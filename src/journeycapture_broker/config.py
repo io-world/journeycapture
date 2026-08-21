@@ -15,7 +15,7 @@ class ConfigError(Exception):
     pass
 
 
-_VALID_MCP_PROFILE_KEYS = {"save_screenshots", "screenshot_dir", "max_saved_screenshots"}
+_VALID_MCP_PROFILE_KEYS = {"save_screenshots", "screenshot_dir", "max_saved_screenshots", "timeout"}
 
 
 _MIN_KEY_LENGTH = 16  # matches journeycapture_windows_thinclient.config.Config.api_key's min_length

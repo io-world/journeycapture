@@ -217,11 +217,11 @@ def test_mcp_profile_loads_from_file(tmp_path: Path) -> None:
         {
             "api_key": "a" * 32,
             "machines": {"office-pc": "b" * 32},
-            "mcp_profile": {"save_screenshots": True, "max_saved_screenshots": 50},
+            "mcp_profile": {"save_screenshots": True, "max_saved_screenshots": 50, "timeout": 5.0},
         },
     )
     settings = load_settings(path)
-    assert settings.mcp_profile == {"save_screenshots": True, "max_saved_screenshots": 50}
+    assert settings.mcp_profile == {"save_screenshots": True, "max_saved_screenshots": 50, "timeout": 5.0}
 
 
 def test_mcp_profile_unknown_key_raises(tmp_path: Path) -> None:

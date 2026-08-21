@@ -295,14 +295,21 @@ Full setup/API/testing details: `docs/BROKER.md`.
 ### Broker-pushed config
 
 `machine_profiles` (`machine_id: {"screenshot": {...}, "log_level": ...}`) and
-`mcp_profile` (`{"save_screenshots": ..., "screenshot_dir": ..., "max_saved_screenshots": ...}`)
-in the broker's own config let it own that operational config centrally instead of
-every thin client / the MCP server needing its own local copy — both `{}` by
-default, so nothing here changes behavior unless configured. Only fields with no
-bearing on *finding or trusting* the broker are eligible for this — everything
-needed to reach the broker in the first place (`broker_host`/`broker_port`/
-`broker_tls`/`broker_cert_fingerprint`, a thin client's own `machine_id`/`api_key`)
-has to stay local, since there's no connection to push it over yet.
+`mcp_profile` (`{"save_screenshots": ..., "screenshot_dir": ..., "max_saved_screenshots": ..., "timeout": ...}`)
+in the broker's own config are the *recommended* place for this operational
+config to live — centralized on the broker rather than hand-edited per machine.
+Both default to `{}`, and each client's own local `config.json` is the fallback
+for whatever a profile doesn't mention (or when the broker's briefly
+unreachable), not the primary source. Only fields with no bearing on *finding or
+trusting* the broker are eligible for this — everything needed to reach the
+broker in the first place (`broker_host`/`broker_port`/`broker_tls`/
+`broker_cert_fingerprint`, a thin client's own `machine_id`/`api_key`) has to
+stay local, since there's no connection to push it over yet. Two more fields stay
+local by choice, not necessity: `mcp_host`/`mcp_port` (letting the broker move
+the MCP server's bind address would undermine the loopback-only default that's
+the only thing standing between "this machine only" and unauthenticated remote
+control) and a thin client's `log_file` (would need live-swapping the active
+`RotatingFileHandler`'s target file, real complexity nobody's asked for yet).
 
 `ws_server.py`'s handler always sends one more frame right after the handshake
 ack — `{"type": "config", **machine_profiles.get(machine_id, {})}`, `{"type":
@@ -314,7 +321,11 @@ consume this frame. The broker's `GET /mcp-config` route serves the same idea to
 the MCP server, fetched once at startup (`journeycapture_mcp/__init__.main()`,
 tolerant of the broker being briefly unreachable — logs a warning and falls back
 to local settings rather than refusing to start) and merged over `Settings` via
-`dataclasses.replace()` before `build_server()` is called.
+`dataclasses.replace()` before `build_server()` is called. A pushed `timeout`
+needs one extra step beyond that merge: `client.set_timeout(...)`, since
+`client`'s `httpx.AsyncClient` was already built with the old value at
+construction time and `httpx.Client.timeout` has a public setter (no need to
+rebuild the client, or redo a TLS-pinning handshake).
 
 Full design and the exact JSON shapes: `docs/BROKER.md`'s "Broker-pushed config"
 section.

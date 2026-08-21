@@ -15,6 +15,13 @@ def settings() -> Settings:
     return Settings(broker_host="192.168.1.10", broker_api_key="a" * 32)
 
 
+def test_set_timeout_updates_underlying_httpx_client(settings: Settings) -> None:
+    client = JourneyCaptureClient(settings)
+    assert client._client.timeout != httpx.Timeout(42.0)
+    client.set_timeout(42.0)
+    assert client._client.timeout == httpx.Timeout(42.0)
+
+
 def make_client(settings: Settings, handler) -> JourneyCaptureClient:
     client = JourneyCaptureClient(settings)
     client._client = httpx.AsyncClient(

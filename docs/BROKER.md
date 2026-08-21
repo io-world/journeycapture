@@ -67,8 +67,8 @@ the MCP server.
   here must also be a key in `machines`. Pushed to that thin client right after its
   websocket handshake succeeds — see "Broker-pushed config" below.
 - `mcp_profile` (optional, default `{}`) — an object with `save_screenshots`/
-  `screenshot_dir`/`max_saved_screenshots`. Fetched by the MCP server once at
-  startup via `GET /mcp-config`. See "Broker-pushed config" below.
+  `screenshot_dir`/`max_saved_screenshots`/`timeout`. Fetched by the MCP server
+  once at startup via `GET /mcp-config`. See "Broker-pushed config" below.
 
 **Environment variables**: `JOURNEYCAPTURE_BROKER_API_KEY`,
 `JOURNEYCAPTURE_BROKER_MACHINES` (a JSON object, e.g.
@@ -123,24 +123,38 @@ unverified certificate.
 
 ## Broker-pushed config
 
-Off by default (`machine_profiles`/`mcp_profile` both `{}`) — every thin client and
-the MCP server keep behaving exactly as before this existed, purely from their own
-local `config.json`. When you do configure a profile, the broker becomes the single
-place that setting lives, instead of every machine needing its own copy hand-edited
-locally.
+The broker is the recommended, primary place to set operational config — the more
+that lives in one place, the less there is to keep in sync by hand across every
+thin client and the MCP server. `machine_profiles`/`mcp_profile` both default to
+`{}`, and each client's own local `config.json` is the fallback for whatever the
+broker doesn't have an opinion on, not the other way around: if you never
+configure a profile, or the broker is briefly unreachable, a client just runs on
+its local values, same as before this existed — nothing here trades away that
+resilience.
 
 **What can move to the broker, and what can't.** Only settings with no bearing on
 *finding or trusting* the broker in the first place are eligible: a thin client's
 `screenshot` (format/quality/monitor) and `log_level`; the MCP server's
-`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`. Everything else stays
-local by necessity, not by choice — `broker_host`/`broker_port`/`broker_tls`/
-`broker_cert_fingerprint` and a thin client's own `machine_id`/`api_key` are needed
-*before* any connection to the broker exists, so there's no channel to push them
-over yet; a thin client's `log_file` and the MCP server's `mcp_host`/`mcp_port` are
-about that process's own machine (where to write a file, what address to bind), not
-something the broker has any business deciding. `timeout` also stays local
-deliberately — how long a given client tolerates the broker being slow is that
-client's own call, not a policy to centralize.
+`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`/`timeout`. Three
+things stay local, for two different reasons:
+
+- `broker_host`/`broker_port`/`broker_tls`/`broker_cert_fingerprint` and a thin
+  client's own `machine_id`/`api_key` — needed *before* any connection to the
+  broker exists, so there's no channel to push them over yet. Not a design
+  choice, a hard bootstrap constraint.
+- `mcp_host`/`mcp_port` and a thin client's `log_file` — these *could* technically
+  be wired the same way, but deliberately weren't. `mcp_host`/`mcp_port` control
+  where the MCP server binds for its own MCP client, and the loopback-only
+  default is the one thing standing between "this machine only" and
+  unauthenticated remote control of every connected machine (see
+  `docs/MCP_SERVER.md`'s security note) — letting a broker-side config change
+  silently move that bind address is a real risk for close to no benefit.
+  `log_file` would require live-swapping the thin client's *active*
+  `RotatingFileHandler` to a new target file mid-process (open new, close old),
+  meaningfully more engineering than `log_level`'s one-line
+  `logging.getLogger().setLevel(...)`, for a setting nobody's asked to
+  centralize. Revisit either if a real need shows up — the mechanism (§ below)
+  doesn't change, just the allowlist of keys it accepts.
 
 **Thin client**: right after the websocket handshake ack (`{"ok": true}`), the
 broker always sends one more frame — `{"type": "config", ...}` with whatever's in
@@ -159,7 +173,13 @@ come back over the matching local `Settings` fields before building the server.
 This fetch failing (broker unreachable, wrong key) logs a warning and falls back to
 local-only settings rather than refusing to start — a broker being briefly down at
 MCP-server-startup time shouldn't take the whole server offline, especially since
-every tool call already handles a down broker the same way, per-call.
+every tool call already handles a down broker the same way, per-call. A pushed
+`timeout` needs one extra step beyond the `Settings` merge: `client`'s own
+`httpx.AsyncClient` was already built with the *old* timeout at construction time
+(it's what made the `/mcp-config` call itself), so `main()` also calls
+`client.set_timeout(settings.timeout)` — `httpx.Client.timeout` has a public
+setter, so this doesn't require rebuilding the client (and redoing the
+TLS-pinning handshake, when TLS is on).
 
 **If you ever need to look up which config a given machine is actually running
 with**: it's always the local `config.json` merged with whatever

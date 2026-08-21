@@ -171,10 +171,11 @@ Capped at `max_saved_screenshots` (default `100`, config file key or
 files beyond the cap are pruned automatically, so the folder doesn't grow forever.
 Set it to `0` (or negative) to disable pruning and keep everything.
 
-All three of `save_screenshots`/`screenshot_dir`/`max_saved_screenshots` can also be
-set centrally on the broker (`mcp_profile`) instead of in this server's own local
-config — fetched once at startup and overriding the matching local value for
-whichever keys the broker actually has configured. See `docs/BROKER.md`'s
+`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`, and `timeout`, are
+all recommended to set centrally on the broker (`mcp_profile`) rather than in
+this server's own local config — fetched once at startup and overriding the
+matching local value for whichever keys the broker actually has configured, with
+the local config file only acting as the fallback. See `docs/BROKER.md`'s
 "Broker-pushed config" section.
 
 ## Testing

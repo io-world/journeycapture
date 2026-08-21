@@ -62,6 +62,12 @@ def main() -> None:
     if pushed:
         settings = dataclasses.replace(settings, **pushed)
         logger.info("applied broker-pushed config: %s", pushed)
+        if "timeout" in pushed:
+            # settings.timeout is now updated, but `client`'s own httpx.AsyncClient
+            # was already built with the old value at construction time — re-apply
+            # it directly rather than rebuilding the client (which would redo the
+            # TLS-pinning handshake unnecessarily when TLS is on).
+            client.set_timeout(settings.timeout)
 
     server = build_server(client, settings)
     server.run(transport="streamable-http", host=settings.mcp_host, port=settings.mcp_port)

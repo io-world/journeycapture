@@ -18,22 +18,8 @@ MCP client  --stdio/HTTP-->  MCP server  --HTTP-->  broker  <--WebSocket--  thin
 Each runs on its own machine (thin client: the Windows box; broker and MCP server:
 typically the controller machine, though nothing requires that).
 
-## Running the thin client from source
-
-```
-uv sync
-cp examples/config.example.json config.json
-# edit config.json: set broker_host/machine_id/api_key to match the broker's config
-uv run journeycapture
-```
-
-Config is loaded from (in order): `--config PATH`, the `JOURNEYCAPTURE_CONFIG` env
-var, or `config.json` next to the executable/CWD.
-
-## Building the Windows executable
-
-See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) — must be built on Windows.
-Manual verification checklist: [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_TEST.md).
+Set these up in order: the broker first (everything else connects to it), then the
+thin client(s), then the MCP server.
 
 ## Broker
 
@@ -70,18 +56,39 @@ the second command printed. See [docs/BROKER.md](docs/BROKER.md)'s "TLS setup"
 section for the full explanation (why a self-signed cert + pinned fingerprint
 instead of a CA, and what to do if the cert is ever regenerated).
 
-### Broker-pushed config (optional)
+### Broker-pushed config
 
-The broker can own operational config centrally instead of every thin client / the
-MCP server needing its own local copy — off by default. Add `machine_profiles`
-(per-`machine_id`: `screenshot`/`log_level`) and/or `mcp_profile`
-(`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`) to `broker_config.json`
-and it's pushed to clients automatically (thin clients on every connect, the MCP
-server once at startup) — a field a profile doesn't mention just keeps whatever the
-client's own local config already had. Only settings with no bearing on *finding or
-trusting* the broker are eligible for this — credentials and the broker's own
+The broker is the recommended place to set operational config centrally, instead
+of hand-editing every thin client / the MCP server's own local copy — the more
+that lives in one place, the less there is to keep in sync across machines. Add
+`machine_profiles` (per-`machine_id`: `screenshot`/`log_level`) and/or
+`mcp_profile` (`save_screenshots`/`screenshot_dir`/`max_saved_screenshots`/
+`timeout`) to `broker_config.json` and it's pushed to clients automatically (thin
+clients on every connect, the MCP server once at startup). A client's own local
+config is the fallback, not the primary source: a field a profile doesn't mention
+keeps whatever the client's local value already was, and a broker that's briefly
+unreachable at startup just leaves the MCP server on local settings with a
+warning rather than refusing to start. Only settings with no bearing on *finding
+or trusting* the broker are eligible for this — credentials and the broker's own
 address always stay local. See [docs/BROKER.md](docs/BROKER.md)'s "Broker-pushed
 config" section for the full design.
+
+## Running the thin client from source
+
+```
+uv sync
+cp examples/config.example.json config.json
+# edit config.json: set broker_host/machine_id/api_key to match the broker's config
+uv run journeycapture
+```
+
+Config is loaded from (in order): `--config PATH`, the `JOURNEYCAPTURE_CONFIG` env
+var, or `config.json` next to the executable/CWD.
+
+## Building the Windows executable
+
+See [docs/WINDOWS_BUILD.md](docs/WINDOWS_BUILD.md) — must be built on Windows.
+Manual verification checklist: [docs/WINDOWS_SMOKE_TEST.md](docs/WINDOWS_SMOKE_TEST.md).
 
 ## MCP server
 
