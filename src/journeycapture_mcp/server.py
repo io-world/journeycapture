@@ -40,6 +40,13 @@ def build_server(client: JourneyCaptureClient, settings: Settings) -> MCPServer:
             out_dir.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
             out_path = out_dir / f"{timestamp}.{image_format}"
+            # datetime.now()'s resolution can be coarser than 1 microsecond on
+            # Windows, so back-to-back calls can collide on the same timestamp;
+            # disambiguate rather than silently overwriting the earlier file.
+            collision_counter = 1
+            while out_path.exists():
+                out_path = out_dir / f"{timestamp}_{collision_counter}.{image_format}"
+                collision_counter += 1
             out_path.write_bytes(data)
             logger.info("saved screenshot to %s", out_path)
             _prune_old_screenshots(out_dir)

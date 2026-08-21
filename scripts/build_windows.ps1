@@ -44,7 +44,12 @@ Ok "Dependencies up to date."
 # -- 3. Run tests ---------------------------------------------------------------
 if (-not $SkipTests) {
     Step "Running test suite (uv run pytest -q)"
-    uv run pytest -q
+    # --basetemp keeps pytest's tmp_path fixture off the shared %TEMP%\pytest-of-<user>
+    # tree: that directory accumulates a "pytest-current" symlink pytest re-points on
+    # every run, and a stale/corrupted one there can make an otherwise-passing run
+    # crash during teardown with a WinError 5 (access denied) unrelated to the tests
+    # themselves. build\ is already gitignored and safe to wipe each run.
+    uv run pytest -q --basetemp="$Root\build\pytest-tmp"
     if ($LASTEXITCODE -ne 0) { Fail "Tests failed - aborting build. Use -SkipTests to bypass." }
     Ok "All tests passed."
 } else {
